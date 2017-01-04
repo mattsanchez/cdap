@@ -79,10 +79,6 @@
               <followSymlinks>false</followSymlinks>
             </fileset>
             <fileset>
-              <directory>dll</directory>
-              <followSymlinks>false</followSymlinks>
-            </fileset>
-            <fileset>
               <directory>wrangler_dist</directory>
               <followSymlinks>false</followSymlinks>
             </fileset>
