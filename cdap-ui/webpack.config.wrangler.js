@@ -23,7 +23,10 @@ var autoprefixer = require('autoprefixer');
 var StyleLintPlugin = require('stylelint-webpack-plugin');
 
 var plugins = [
-  new webpack.optimize.CommonsChunkPlugin("common", "common.js", Infinity),
+  new webpack.DllReferencePlugin({
+    context: path.resolve(__dirname, 'dll'),
+    manifest: require("./dll/wrangler-vendor-manifest.json")
+  }),
   new LodashModuleReplacementPlugin,
   new LiveReloadPlugin(),
   new webpack.optimize.DedupePlugin(),
@@ -86,10 +89,15 @@ var loaders = [
     loader: 'style-loader!css-loader!sass-loader'
   },
   {
+
     test: /\.js$/,
     loader: 'babel',
     exclude: /node_modules/,
+    include: [
+      path.join(__dirname, 'app')
+    ],
     query: {
+      cacheDirectory: true,
       plugins: ['lodash'],
       presets: ['react', 'es2015']
     }
@@ -107,29 +115,7 @@ var loaders = [
 module.exports = {
   context: __dirname + '/app/wrangler',
   entry: {
-    'wrangler': ['./wrangler.js'],
-    'common': [
-      'react',
-      'react-dom',
-      'redux',
-      'lodash',
-      'classnames',
-      'rx',
-      'reactstrap',
-      'react-addons-css-transition-group',
-      'i18n-react',
-      'react-dropzone',
-      'react-redux',
-      'react-file-download',
-      'papaparse',
-      'rx-dom',
-      'd3',
-      'chart.js',
-      'reactabular-table',
-      'reactabular-sticky',
-      'reactabular-virtualized',
-      'reactabular-resizable'
-    ]
+    'wrangler': ['./wrangler.js']
   },
   module: {
     preLoaders: [

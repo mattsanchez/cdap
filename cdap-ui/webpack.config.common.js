@@ -14,9 +14,14 @@
  * the License.
  */
 var webpack = require('webpack');
+var path = require('path');
+
 var plugins = [
   new webpack.optimize.DedupePlugin(),
-  new webpack.optimize.CommonsChunkPlugin("common-lib", "common-lib.js", Infinity),
+  new webpack.DllReferencePlugin({
+    context: path.resolve(__dirname, 'dll'),
+    manifest: require("./dll/common-vendor-manifest.json")
+  }),
   // by default minify it.
   new webpack.DefinePlugin({
     'process.env':{
@@ -68,16 +73,7 @@ var loaders = [
 module.exports = {
   context: __dirname + '/app/common',
   entry: {
-    'common': ['./cask-header.js'],
-    'common-lib': [
-      'classnames',
-      'reactstrap',
-      'i18n-react',
-      'sockjs-client',
-      'rx',
-      'react-dropzone',
-      'react-redux'
-    ]
+    'common': ['./cask-header.js']
   },
   module: {
     preLoaders: [

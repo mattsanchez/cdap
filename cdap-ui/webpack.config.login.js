@@ -17,7 +17,7 @@ var webpack = require('webpack');
 var CopyWebpackPlugin = require('copy-webpack-plugin');
 var StyleLintPlugin = require('stylelint-webpack-plugin');
 var plugins = [
-  new webpack.optimize.CommonsChunkPlugin("common", "common.js", Infinity),
+  new webpack.optimize.CommonsChunkPlugin({ name: 'common', filename: 'common.js' }),
   new webpack.optimize.DedupePlugin(),
   new CopyWebpackPlugin([
     {

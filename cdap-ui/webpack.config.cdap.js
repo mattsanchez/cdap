@@ -23,7 +23,10 @@ var autoprefixer = require('autoprefixer');
 var StyleLintPlugin = require('stylelint-webpack-plugin');
 
 var plugins = [
-  new webpack.optimize.CommonsChunkPlugin("common", "common.js", Infinity),
+  new webpack.DllReferencePlugin({
+    context: path.resolve(__dirname, 'dll'),
+    manifest: require("./dll/cdap-vendor-manifest.json")
+  }),
   new LodashModuleReplacementPlugin,
   new LiveReloadPlugin(),
   new webpack.optimize.DedupePlugin(),
@@ -62,7 +65,7 @@ if (mode === 'production' || mode === 'build') {
     }),
     new webpack.optimize.UglifyJsPlugin({
       compress: {
-          warnings: false
+        warnings: false
       }
     })
   );
@@ -88,7 +91,11 @@ var loaders = [
       /node_modules/,
       /lib/
     ],
+    include: [
+      path.join(__dirname, 'app')
+    ],
     query: {
+      cacheDirectory: true,
       plugins: ['lodash'],
       presets: ['react', 'es2015']
     }
@@ -104,35 +111,10 @@ var loaders = [
 ];
 
 module.exports = {
+  cache: true,
   context: __dirname + '/app/cdap',
   entry: {
-    'cdap': ['./cdap.js'],
-    'common': [
-      'whatwg-fetch',
-      'react',
-      'react-dom',
-      'redux',
-      'lodash',
-      'classnames',
-      'node-uuid',
-      'sockjs-client',
-      'rx',
-      'reactstrap',
-      'react-addons-css-transition-group',
-      'i18n-react',
-      'fuse.js',
-      'react-dropzone',
-      'react-redux',
-      'react-router',
-      'moment',
-      'react-file-download',
-      'mousetrap',
-      'papaparse',
-      'rx-dom',
-      'd3',
-      'chart.js',
-      'cdap-avsc'
-    ]
+    'cdap': ['./cdap.js']
   },
   module: {
     preLoaders: [
