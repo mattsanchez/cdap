@@ -4,7 +4,7 @@
   "description": "Front-end for CDAP",
   "scripts": {
     "start": "node ./server.js",
-    "cdap-prod-build": "NODE_ENV=production webpack",
+    "cdap-prod-build": "NODE_ENV=production parallel-webpack",
     "distribute": "node ./node_modules/gulp/bin/gulp.js distribute",
     "build": "node ./node_modules/gulp/bin/gulp.js build",
     "build-w": "node ./node_modules/gulp/bin/gulp.js build",
