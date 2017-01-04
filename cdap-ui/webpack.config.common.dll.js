@@ -23,7 +23,7 @@ module.exports = {
   },
   output: {
     path: path.join(__dirname, 'dll'),
-    filename: 'dll.cdap.[name].js',
+    filename: 'dll.common.[name].js',
     library: '[name]'
   },
   plugins: [
@@ -31,6 +31,11 @@ module.exports = {
       path: path.join(__dirname, 'dll', 'common-[name]-manifest.json'),
       name: '[name]',
       context: path.resolve(__dirname, 'dll')
+    }),
+    new webpack.optimize.UglifyJsPlugin({
+      compress: {
+        warnings: false
+      }
     })
   ],
   resolve: {

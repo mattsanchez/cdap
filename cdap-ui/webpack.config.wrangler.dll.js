@@ -31,6 +31,11 @@ module.exports = {
       path: path.join(__dirname, 'dll', 'wrangler-[name]-manifest.json'),
       name: '[name]',
       context: path.resolve(__dirname, 'dll')
+    }),
+    new webpack.optimize.UglifyJsPlugin({
+      compress: {
+        warnings: false
+      }
     })
   ],
   resolve: {
