@@ -4,13 +4,21 @@
   "description": "Front-end for CDAP",
   "scripts": {
     "start": "node ./server.js",
+    "precdap-prod-build": "parallel-webpack --config=webpack.config.dlls.js --profile",
     "cdap-prod-build": "NODE_ENV=production parallel-webpack",
+
     "distribute": "node ./node_modules/gulp/bin/gulp.js distribute",
     "build": "node ./node_modules/gulp/bin/gulp.js build",
     "build-w": "node ./node_modules/gulp/bin/gulp.js build",
-    "build-dlls": "parallel-webpack --config=webpack.config.dlls.js --profile --no-info --quite",
+
+    "build-dlls": "parallel-webpack --config=webpack.config.dlls.js --profile",
+
     "cdap-dev-build": "NODE_ENV=development parallel-webpack --config=webpack.config.js -d --profile",
+    "precdap-dev-build": "parallel-webpack --config=webpack.config.dlls.js --profile",
+
+    "precdap-dev-build-w": "parallel-webpack --config=webpack.config.dlls.js --profile",
     "cdap-dev-build-w": "NODE_ENV=development parallel-webpack --dev-tools --watch -d --profile",
+
     "test": "jest --coverage",
     "watch-test": "jest --watch",
     "karma-test": "node ./node_modules/karma/bin/karma start test/karma-conf.js",
