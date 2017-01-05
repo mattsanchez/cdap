@@ -14,10 +14,6 @@
  * the License.
  */
 
-require('classnames');
-require('reactstrap');
-require('i18n-react');
 require('sockjs-client');
-require('rx');
 require('react-dropzone');
 require('react-redux');

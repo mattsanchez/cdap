@@ -15,17 +15,9 @@
  */
 
 require('whatwg-fetch');
-require('react');
-require('react-dom');
-require('redux');
-require('lodash');
-require('classnames');
 require('node-uuid');
 require('sockjs-client');
-require('rx');
-require('reactstrap');
 require('react-addons-css-transition-group');
-require('i18n-react');
 require('fuse.js');
 require('react-dropzone');
 require('react-redux');

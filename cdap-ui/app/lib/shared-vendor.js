@@ -1,5 +1,5 @@
 /*
- * Copyright © 2016 Cask Data, Inc.
+ * Copyright © 2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -12,17 +12,15 @@
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
  * License for the specific language governing permissions and limitations under
  * the License.
- */
+*/
 
-require('react-addons-css-transition-group');
-require('react-dropzone');
-require('react-redux');
-require('react-file-download');
-require('papaparse');
-require('rx-dom');
-require('d3');
-require('chart.js');
-require('reactabular-table');
-require('reactabular-sticky');
-require('reactabular-virtualized');
-require('reactabular-resizable');
+require('react');
+require('react-dom');
+require('redux');
+require('lodash');
+require('classnames');
+require('rx');
+require('reactstrap');
+require('i18n-react');
+require('react-cookie');
+require('whatwg-fetch');
