@@ -26,6 +26,10 @@ console.log('AKFLDHKBFLHSDB: ', __dirname);
 var plugins = [
   new webpack.DllReferencePlugin({
     context: path.resolve(__dirname, 'dll'),
+    manifest: require(path.join(__dirname, 'dll', 'shared-vendor-manifest.json'))
+  }),
+  new webpack.DllReferencePlugin({
+    context: path.resolve(__dirname, 'dll'),
     manifest: require(path.join(__dirname, 'dll', 'cdap-vendor-manifest.json'))
   }),
   new LodashModuleReplacementPlugin,

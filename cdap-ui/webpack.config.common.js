@@ -20,6 +20,10 @@ var plugins = [
   new webpack.optimize.DedupePlugin(),
   new webpack.DllReferencePlugin({
     context: path.resolve(__dirname, 'dll'),
+    manifest: require(path.join(__dirname, 'dll', 'shared-vendor-manifest.json'))
+  }),
+  new webpack.DllReferencePlugin({
+    context: path.resolve(__dirname, 'dll'),
     manifest: require(path.join(__dirname, 'dll') + "/common-vendor-manifest.json")
   }),
   // by default minify it.
