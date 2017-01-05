@@ -189,16 +189,16 @@
           <plugin>
             <groupId>com.github.eirslett</groupId>
             <artifactId>frontend-maven-plugin</artifactId>
-            <version>1.3</version>
+            <version>0.0.23</version>
             <executions>
               <execution>
                 <id>dist</id>
                 <goals>
-                  <goal>install-node-and-yarn</goal>
+                  <goal>install-node-and-npm</goal>
                 </goals>
                 <configuration>
                   <nodeVersion>v4.5.0</nodeVersion>
-                  <yarnVersion>v0.18.1</yarnVersion>
+                  <npmVersion>3.8.8</npmVersion>
                 </configuration>
               </execution>
             </executions>
@@ -209,7 +209,7 @@
             <version>1.3.1</version>
             <executions>
               <execution>
-                <id>yarn-install</id>
+                <id>npm-install</id>
                 <phase>process-resources</phase>
                 <goals>
                   <goal>exec</goal>
@@ -217,8 +217,9 @@
                 <configuration>
                   <executable>${project.basedir}/node/node</executable>
                   <arguments>
-                    <executable>${project.basedir}/node/yarn/dist/bin/yarn.js</executable>
+                    <executable>${project.basedir}/node/npm/bin/npm-cli.js</executable>
                     <argument>install</argument>
+                    <argument>-s --progress=false</argument>
                   </arguments>
                 </configuration>
               </execution>
@@ -246,7 +247,7 @@
                 <configuration>
                   <executable>${project.basedir}/node/node</executable>
                   <arguments>
-                    <executable>${project.basedir}/node/yarn/dist/bin/yarn.js</executable>
+                    <executable>${project.basedir}/node/npm/bin/npm-cli.js</executable>
                     <argument>run</argument>
                     <argument>cdap-prod-build</argument>
                   </arguments>
@@ -289,8 +290,8 @@
                 <configuration>
                   <executable>${project.basedir}/node/node</executable>
                   <arguments>
-                    <argument>${project.basedir}/node/yarn/dist/bin/yarn.js</argument>
-                    <argument>install</argument>
+                    <argument>${project.basedir}/node/npm/bin/npm-cli.js</argument>
+                    <argument>prune</argument>
                     <argument>--production</argument>
                   </arguments>
                 </configuration>

@@ -5,15 +5,14 @@
   "scripts": {
     "start": "node ./server.js",
     "cdap-prod-build": "NODE_ENV=production parallel-webpack",
-
     "distribute": "node ./node_modules/gulp/bin/gulp.js distribute",
+
     "build": "node ./node_modules/gulp/bin/gulp.js build",
-    "build-w": "node ./node_modules/gulp/bin/gulp.js build",
+    "build-w": "node ./node_modules/gulp/bin/gulp.js watch",
 
     "build-dlls": "parallel-webpack --config=webpack.config.dlls.js --profile",
 
     "cdap-dev-build": "NODE_ENV=development parallel-webpack --config=webpack.config.js -d --profile",
-
     "cdap-dev-build-w": "NODE_ENV=development parallel-webpack --dev-tools --watch -d --profile",
 
     "test": "jest --coverage",
@@ -83,8 +82,7 @@
     "stylelint-webpack-plugin": "0.4.2",
     "url-loader": "0.5.7",
     "webpack": "1.13.2",
-    "webpack-livereload-plugin": "0.9.0",
-    "yarn": "0.18.1"
+    "webpack-livereload-plugin": "0.9.0"
   },
   "dependencies": {
     "body-parser": "1.14.2",
