@@ -24,12 +24,18 @@ module.exports = {
   output: {
     path: path.join(__dirname, 'dll'),
     filename: 'dll.cdap.[name].js',
-    library: '[name]'
+    library: 'cdap_[name]'
   },
   plugins: [
+    new webpack.DefinePlugin({
+      'process.env':{
+        'NODE_ENV': JSON.stringify("production"),
+        '__DEVTOOLS__': false
+      },
+    }),
     new webpack.DllPlugin({
       path: path.join(__dirname, 'dll', 'cdap-[name]-manifest.json'),
-      name: '[name]',
+      name: 'cdap_[name]',
       context: path.resolve(__dirname, 'dll')
     }),
     new webpack.optimize.UglifyJsPlugin({
@@ -39,6 +45,6 @@ module.exports = {
     })
   ],
   resolve: {
-    modules: [path.resolve(__dirname, 'app', 'lib', 'cdap'), 'node_modules']
+    modules: ['node_modules']
   }
 };

@@ -14,10 +14,10 @@
  * the License.
  */
 
+require('react-addons-css-transition-group');
 require('whatwg-fetch');
 require('node-uuid');
 require('sockjs-client');
-require('react-addons-css-transition-group');
 require('fuse.js');
 require('react-dropzone');
 require('react-redux');

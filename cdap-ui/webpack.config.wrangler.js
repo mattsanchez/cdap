@@ -25,7 +25,7 @@ var StyleLintPlugin = require('stylelint-webpack-plugin');
 var plugins = [
   new webpack.DllReferencePlugin({
     context: path.resolve(__dirname, 'dll'),
-    manifest: require(path.join(__dirname, 'dll', 'shared-vendor-manifest.json'))
+    manifest: require(path.join(__dirname, 'dll', '/shared-vendor-manifest.json'))
   }),
   new webpack.DllReferencePlugin({
     context: path.resolve(__dirname, 'dll'),

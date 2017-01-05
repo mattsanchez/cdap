@@ -20,7 +20,7 @@ var path = require('path');
 var plugins = [
   new webpack.DllReferencePlugin({
     context: path.resolve(__dirname, 'dll'),
-    manifest: require(path.join(__dirname, 'dll', 'shared-vendor-manifest.json'))
+    manifest: require(path.join(__dirname, 'dll', '/shared-vendor-manifest.json'))
   }),
   new webpack.optimize.DedupePlugin(),
   new CopyWebpackPlugin([

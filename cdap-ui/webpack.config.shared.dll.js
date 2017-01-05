@@ -24,12 +24,18 @@ module.exports = {
   output: {
     path: path.join(__dirname, 'dll'),
     filename: 'dll.shared.[name].js',
-    library: '[name]'
+    library: 'shared_[name]'
   },
   plugins: [
+    new webpack.DefinePlugin({
+      'process.env':{
+        'NODE_ENV': JSON.stringify("production"),
+        '__DEVTOOLS__': false
+      },
+    }),
     new webpack.DllPlugin({
       path: path.join(__dirname, 'dll', 'shared-[name]-manifest.json'),
-      name: '[name]',
+      name: 'shared_[name]',
       context: path.resolve(__dirname, 'dll')
     }),
     new webpack.optimize.UglifyJsPlugin({
@@ -39,6 +45,6 @@ module.exports = {
     })
   ],
   resolve: {
-    modules: [path.resolve(__dirname, 'app', 'lib', 'login'), 'node_modules']
+    modules: ['node_modules']
   }
 };

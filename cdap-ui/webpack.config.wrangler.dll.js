@@ -24,12 +24,18 @@ module.exports = {
   output: {
     path: path.join(__dirname, 'dll'),
     filename: 'dll.wrangler.[name].js',
-    library: '[name]'
+    library: 'wrangler_[name]'
   },
   plugins: [
+    new webpack.DefinePlugin({
+      'process.env':{
+        'NODE_ENV': JSON.stringify("production"),
+        '__DEVTOOLS__': false
+      },
+    }),
     new webpack.DllPlugin({
       path: path.join(__dirname, 'dll', 'wrangler-[name]-manifest.json'),
-      name: '[name]',
+      name: 'wrangler_[name]',
       context: path.resolve(__dirname, 'dll')
     }),
     new webpack.optimize.UglifyJsPlugin({
@@ -39,6 +45,6 @@ module.exports = {
     })
   ],
   resolve: {
-    modules: [path.resolve(__dirname, 'app', 'lib', 'wrangler'), 'node_modules']
+    modules: ['node_modules']
   }
 };

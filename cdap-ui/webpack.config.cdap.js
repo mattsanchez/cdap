@@ -21,16 +21,14 @@ var LiveReloadPlugin = require('webpack-livereload-plugin');
 var LodashModuleReplacementPlugin = require('lodash-webpack-plugin');
 var autoprefixer = require('autoprefixer');
 var StyleLintPlugin = require('stylelint-webpack-plugin');
-
-console.log('AKFLDHKBFLHSDB: ', __dirname);
 var plugins = [
   new webpack.DllReferencePlugin({
     context: path.resolve(__dirname, 'dll'),
-    manifest: require(path.join(__dirname, 'dll', 'shared-vendor-manifest.json'))
+    manifest: require(path.join(__dirname, 'dll', '/shared-vendor-manifest.json'))
   }),
   new webpack.DllReferencePlugin({
     context: path.resolve(__dirname, 'dll'),
-    manifest: require(path.join(__dirname, 'dll', 'cdap-vendor-manifest.json'))
+    manifest: require(path.join(__dirname, 'dll', '/cdap-vendor-manifest.json'))
   }),
   new LodashModuleReplacementPlugin,
   new LiveReloadPlugin(),

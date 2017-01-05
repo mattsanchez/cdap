@@ -4,7 +4,6 @@
   "description": "Front-end for CDAP",
   "scripts": {
     "start": "node ./server.js",
-    "precdap-prod-build": "parallel-webpack --config=webpack.config.dlls.js --profile",
     "cdap-prod-build": "NODE_ENV=production parallel-webpack",
 
     "distribute": "node ./node_modules/gulp/bin/gulp.js distribute",
@@ -14,9 +13,7 @@
     "build-dlls": "parallel-webpack --config=webpack.config.dlls.js --profile",
 
     "cdap-dev-build": "NODE_ENV=development parallel-webpack --config=webpack.config.js -d --profile",
-    "precdap-dev-build": "parallel-webpack --config=webpack.config.dlls.js --profile",
 
-    "precdap-dev-build-w": "parallel-webpack --config=webpack.config.dlls.js --profile",
     "cdap-dev-build-w": "NODE_ENV=development parallel-webpack --dev-tools --watch -d --profile",
 
     "test": "jest --coverage",
