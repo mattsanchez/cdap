@@ -90,7 +90,6 @@
     "yarn": "0.18.1"
   },
   "dependencies": {
-    "angular": "1.5.8",
     "body-parser": "1.14.2",
     "bootstrap": "4.0.0-alpha.5",
     "cdap-avsc": "4.1.12",
