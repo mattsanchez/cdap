@@ -16,6 +16,8 @@
 
 package co.cask.cdap.common.conf;
 
+import co.cask.cdap.proto.ProgramType;
+
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -1128,5 +1130,37 @@ public final class Constants {
   public static final class OperationalStats {
     public static final String EXTENSIONS_DIR = "operational.stats.extensions.dir";
     public static final String REFRESH_INTERVAL_SECS = "operational.stats.refresh.interval.secs";
+  }
+
+  /**
+   * Constants for retry policies.
+   */
+  public static final class Retry {
+    private static final String PREFIX = "retry.policy.";
+    public static final String TYPE = PREFIX + "type";
+    public static final String MAX_TIME_SECS = PREFIX + "max.time.secs";
+    public static final String MAX_RETRIES = PREFIX + "max.retries";
+    public static final String DELAY_BASE_MS = PREFIX + "delay.base.ms";
+    public static final String DELAY_MAX_MS = PREFIX + "delay.max.ms";
+
+    public static String type(ProgramType programType) {
+      return programType.getPrettyName().toLowerCase() + "." + TYPE;
+    }
+
+    public static String maxTimeSecs(ProgramType programType) {
+      return programType.getPrettyName().toLowerCase() + "." + MAX_TIME_SECS;
+    }
+
+    public static String maxRetries(ProgramType programType) {
+      return programType.getPrettyName().toLowerCase() + "." + MAX_RETRIES;
+    }
+
+    public static String delayBase(ProgramType programType) {
+      return programType.getPrettyName().toLowerCase() + "." + DELAY_BASE_MS;
+    }
+
+    public static String delayMax(ProgramType programType) {
+      return programType.getPrettyName().toLowerCase() + "." + DELAY_MAX_MS;
+    }
   }
 }

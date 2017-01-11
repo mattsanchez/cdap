@@ -17,12 +17,17 @@
 package co.cask.cdap.app.services;
 
 import co.cask.cdap.api.ServiceDiscoverer;
+import co.cask.cdap.api.retry.RetriesExhaustedException;
+import co.cask.cdap.api.retry.RetryableException;
 import co.cask.cdap.common.conf.Constants;
+import co.cask.cdap.common.discovery.EndpointStrategy;
 import co.cask.cdap.common.discovery.RandomEndpointStrategy;
+import co.cask.cdap.common.service.Retries;
+import co.cask.cdap.common.service.RetryStrategy;
 import co.cask.cdap.proto.id.ProgramId;
+import com.google.common.base.Supplier;
 import org.apache.twill.discovery.Discoverable;
 import org.apache.twill.discovery.DiscoveryServiceClient;
-import org.apache.twill.discovery.ServiceDiscovered;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,7 +35,6 @@ import java.net.InetSocketAddress;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Arrays;
-import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
@@ -44,17 +48,34 @@ public abstract class AbstractServiceDiscoverer implements ServiceDiscoverer {
 
   private final String namespaceId;
   private final String applicationId;
+  protected final RetryStrategy retryStrategy;
 
-  public AbstractServiceDiscoverer(ProgramId programId) {
+  public AbstractServiceDiscoverer(ProgramId programId, RetryStrategy retryStrategy) {
     this.namespaceId = programId.getNamespace();
     this.applicationId = programId.getApplication();
+    this.retryStrategy = retryStrategy;
   }
 
   @Override
-  public URL getServiceURL(String applicationId, String serviceId) {
+  public URL getServiceURL(final String applicationId, final String serviceId) {
     String discoveryName = String.format("service.%s.%s.%s", namespaceId, applicationId, serviceId);
-    ServiceDiscovered discovered = getDiscoveryServiceClient().discover(discoveryName);
-    return createURL(new RandomEndpointStrategy(discovered).pick(1, TimeUnit.SECONDS), applicationId, serviceId);
+    final EndpointStrategy endpointStrategy =
+      new RandomEndpointStrategy(getDiscoveryServiceClient().discover(discoveryName));
+
+    try {
+      return Retries.supplyWithRetries(new Supplier<URL>() {
+        @Override
+        public URL get() {
+          Discoverable discoverable = endpointStrategy.pick();
+          if (discoverable == null) {
+            throw new RetryableException();
+          }
+          return createURL(discoverable, applicationId, serviceId);
+        }
+      }, retryStrategy);
+    } catch (RetriesExhaustedException | InterruptedException e) {
+      return null;
+    }
   }
 
   @Override
@@ -68,10 +89,7 @@ public abstract class AbstractServiceDiscoverer implements ServiceDiscoverer {
   protected abstract DiscoveryServiceClient getDiscoveryServiceClient();
 
   @Nullable
-  private URL createURL(@Nullable Discoverable discoverable, String applicationId, String serviceId) {
-    if (discoverable == null) {
-      return null;
-    }
+  private URL createURL(Discoverable discoverable, String applicationId, String serviceId) {
     InetSocketAddress address = discoverable.getSocketAddress();
     String scheme = Arrays.equals(Constants.Security.SSL_URI_SCHEME.getBytes(), discoverable.getPayload()) ?
       Constants.Security.SSL_URI_SCHEME : Constants.Security.URI_SCHEME;
@@ -82,7 +100,7 @@ public abstract class AbstractServiceDiscoverer implements ServiceDiscoverer {
     try {
       return new URL(path);
     } catch (MalformedURLException e) {
-      LOG.error("Got exception while creating serviceURL", e);
+      LOG.error("Got malformed path '{}' while discovering service {}", path, discoverable.getName(), e);
       return null;
     }
   }

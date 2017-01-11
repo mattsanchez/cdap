@@ -70,8 +70,8 @@ public final class DatasetProperties {
   @Override
   public String toString() {
     return "DatasetProperties{" +
-      "description=" + description +
-      "properties=" + properties +
+      "description='" + description + '\'' +
+      ", properties=" + properties +
       '}';
   }
 

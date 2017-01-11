@@ -50,6 +50,7 @@ import co.cask.cdap.common.conf.CConfiguration;
 import co.cask.cdap.common.conf.Constants;
 import co.cask.cdap.common.lang.ClassLoaders;
 import co.cask.cdap.common.lang.CombineClassLoader;
+import co.cask.cdap.common.service.Retries;
 import co.cask.cdap.data.dataset.SystemDatasetInstantiator;
 import co.cask.cdap.data2.dataset2.DatasetFramework;
 import co.cask.cdap.data2.dataset2.DynamicDatasetCache;
@@ -67,6 +68,7 @@ import co.cask.cdap.proto.id.ApplicationId;
 import co.cask.cdap.proto.id.EntityId;
 import co.cask.cdap.proto.id.NamespaceId;
 import co.cask.cdap.proto.id.ProgramId;
+import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import org.apache.tephra.RetryStrategies;
@@ -79,6 +81,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import javax.annotation.Nullable;
 
 /**
@@ -136,7 +140,10 @@ public abstract class AbstractContext extends AbstractServiceDiscoverer
                             SecureStore secureStore, SecureStoreManager secureStoreManager,
                             MessagingService messagingService,
                             @Nullable PluginInstantiator pluginInstantiator) {
-    super(program.getId());
+    super(program.getId(),
+          SystemArguments.getRetryStrategy(programOptions.getUserArguments().asMap(),
+                                           program.getType(),
+                                           cConf));
 
     this.program = program;
     this.programOptions = programOptions;
@@ -168,7 +175,8 @@ public abstract class AbstractContext extends AbstractServiceDiscoverer
     this.pluginContext = new DefaultPluginContext(pluginInstantiator, program.getId(),
                                                   program.getApplicationSpecification().getPlugins());
     this.admin = new DefaultAdmin(dsFramework, program.getId().getNamespaceId(), secureStoreManager,
-                                  new BasicMessagingAdmin(messagingService, program.getId().getNamespaceId()));
+                                  new BasicMessagingAdmin(messagingService, program.getId().getNamespaceId()),
+                                  retryStrategy);
     this.secureStore = secureStore;
     this.defaultTxTimeout = determineTransactionTimeout(cConf);
     this.transactional = Transactions.createTransactional(getDatasetCache(), defaultTxTimeout);
@@ -290,19 +298,47 @@ public abstract class AbstractContext extends AbstractServiceDiscoverer
     return getDataset(namespace, name, arguments, AccessType.UNKNOWN);
   }
 
-  protected <T extends Dataset> T getDataset(String namespace, String name, Map<String, String> arguments,
-                                             AccessType accessType) throws DatasetInstantiationException {
+  protected <T extends Dataset> T getDataset(final String namespace, final String name,
+                                             final Map<String, String> arguments,
+                                             final AccessType accessType) throws DatasetInstantiationException {
     if (NamespaceId.SYSTEM.getNamespace().equalsIgnoreCase(namespace)) {
       throw new DatasetInstantiationException(String.format("Dataset %s cannot be instantiated from %s namespace. " +
                                                               "Cannot access %s namespace.",
                                                             name, NamespaceId.SYSTEM, NamespaceId.SYSTEM));
     }
-    return datasetCache.getDataset(namespace, name, arguments, accessType);
+
+    try {
+      return Retries.callWithRetries(new Callable<T>() {
+        @Override
+        public T call() throws DatasetInstantiationException {
+          return datasetCache.getDataset(namespace, name, arguments, accessType);
+        }
+      }, retryStrategy);
+    } catch (ExecutionException e) {
+      Throwables.propagateIfInstanceOf(e.getCause(), DatasetInstantiationException.class);
+      throw new DatasetInstantiationException("Error instantiating Dataset " + name, e.getCause());
+    } catch (InterruptedException e) {
+      throw new DatasetInstantiationException("Interrupted while instantiating Dataset " + name, e);
+    }
   }
 
-  protected <T extends Dataset> T getDataset(String name, Map<String, String> arguments, AccessType accessType)
+  protected <T extends Dataset> T getDataset(final String name, final Map<String, String> arguments,
+                                             final AccessType accessType)
     throws DatasetInstantiationException {
-    return datasetCache.getDataset(name, arguments, accessType);
+
+    try {
+      return Retries.callWithRetries(new Callable<T>() {
+        @Override
+        public T call() throws Exception {
+          return datasetCache.getDataset(name, arguments, accessType);
+        }
+      }, retryStrategy);
+    } catch (ExecutionException e) {
+      Throwables.propagateIfInstanceOf(e.getCause(), DatasetInstantiationException.class);
+      throw new DatasetInstantiationException("Error instantiating Dataset " + name, e.getCause());
+    } catch (InterruptedException e) {
+      throw new DatasetInstantiationException("Interrupted while instantiating Dataset " + name, e);
+    }
   }
 
   @Override

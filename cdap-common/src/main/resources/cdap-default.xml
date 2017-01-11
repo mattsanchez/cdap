@@ -2317,4 +2317,342 @@
     </description>
   </property>
 
+  <!-- Client retry configuration for different program types -->
+
+  <!-- MapReduce retry configuration -->
+
+  <property>
+    <name>mapreduce.retry.policy.type</name>
+    <value>exponential.backoff</value>
+    <description>
+      The type of retry policy. Must be 'none', 'fixed.delay', or 'exponential.backoff'.
+      The retry policy is used when CDAP attempted to perform an operation, but that operation failed in a retryable
+      way. The most common type of failure is if a dependent service was unavailable. For example, if a transaction
+      could not be started because the transaction service is not available. Any CDAP method that throws a
+      RetryableException will use this policy if it encounters a RetryableException
+    </description>
+  </property>
+
+  <property>
+    <name>mapreduce.retry.policy.max.time.secs</name>
+    <value>60000</value>
+    <description>
+      The max elapsed time in seconds before retries are aborted.
+    </description>
+  </property>
+
+  <property>
+    <name>mapreduce.retry.policy.max.retries</name>
+    <value>1000</value>
+    <description>
+      The max number of retries to attempt before aborting.
+      By default, the max time will be hit before this will be hit
+    </description>
+  </property>
+
+  <property>
+    <name>mapreduce.retry.policy.delay.base.ms</name>
+    <value>1000</value>
+    <description>
+      The base delay between retries in milliseconds. Used by the 'fixed.delay' and 'exponential.backoff' policy types
+    </description>
+  </property>
+
+  <property>
+    <name>mapreduce.retry.policy.delay.max.ms</name>
+    <value>30000</value>
+    <description>
+      The maximum delay between retries in milliseconds. Only used if the policy type is 'exponential.backoff'
+    </description>
+  </property>
+
+  <!-- Spark retry configuration -->
+
+  <property>
+    <name>spark.retry.policy.type</name>
+    <value>exponential.backoff</value>
+    <description>
+      The type of retry policy. Must be 'none', 'fixed.delay', or 'exponential.backoff'.
+      The retry policy is used when CDAP attempted to perform an operation, but that operation failed in a retryable
+      way. The most common type of failure is if a dependent service was unavailable. For example, if a transaction
+      could not be started because the transaction service is not available. Any CDAP method that throws a
+      RetryableException will use this policy if it encounters a RetryableException
+    </description>
+  </property>
+
+  <property>
+    <name>spark.retry.policy.max.time.secs</name>
+    <value>60000</value>
+    <description>
+      The max elapsed time in seconds before retries are aborted.
+    </description>
+  </property>
+
+  <property>
+    <name>spark.retry.policy.max.retries</name>
+    <value>1000</value>
+    <description>
+      The max number of retries to attempt before aborting.
+      By default, the max time will be hit before this will be hit
+    </description>
+  </property>
+
+  <property>
+    <name>spark.retry.policy.delay.base.ms</name>
+    <value>1000</value>
+    <description>
+      The base delay between retries in milliseconds. Used by the 'fixed.delay' and 'exponential.backoff' policy types
+    </description>
+  </property>
+
+  <property>
+    <name>spark.retry.policy.delay.max.ms</name>
+    <value>30000</value>
+    <description>
+      The maximum delay between retries in milliseconds. Only used if the policy type is 'exponential.backoff'
+    </description>
+  </property>
+
+  <!-- Custom Action configuration -->
+
+  <property>
+    <name>custom.retry.policy.type</name>
+    <value>exponential.backoff</value>
+    <description>
+      The type of retry policy. Must be 'none', 'fixed.delay', or 'exponential.backoff'.
+      The retry policy is used when CDAP attempted to perform an operation, but that operation failed in a retryable
+      way. The most common type of failure is if a dependent service was unavailable. For example, if a transaction
+      could not be started because the transaction service is not available. Any CDAP method that throws a
+      RetryableException will use this policy if it encounters a RetryableException
+    </description>
+  </property>
+
+  <property>
+    <name>custom.retry.policy.max.time.secs</name>
+    <value>60000</value>
+    <description>
+      The max elapsed time in seconds before retries are aborted.
+    </description>
+  </property>
+
+  <property>
+    <name>custom.retry.policy.max.retries</name>
+    <value>1000</value>
+    <description>
+      The max number of retries to attempt before aborting.
+      By default, the max time will be hit before this will be hit
+    </description>
+  </property>
+
+  <property>
+    <name>custom.retry.policy.delay.base.ms</name>
+    <value>1000</value>
+    <description>
+      The base delay between retries in milliseconds. Used by the 'fixed.delay' and 'exponential.backoff' policy types
+    </description>
+  </property>
+
+  <property>
+    <name>custom.retry.policy.delay.max.ms</name>
+    <value>30000</value>
+    <description>
+      The maximum delay between retries in milliseconds. Only used if the policy type is 'exponential.backoff'
+    </description>
+  </property>
+
+  <!-- Workflow configuration -->
+
+  <property>
+    <name>workflow.retry.policy.type</name>
+    <value>exponential.backoff</value>
+    <description>
+      The type of retry policy. Must be 'none', 'fixed.delay', or 'exponential.backoff'.
+      The retry policy is used when CDAP attempted to perform an operation, but that operation failed in a retryable
+      way. The most common type of failure is if a dependent service was unavailable. For example, if a transaction
+      could not be started because the transaction service is not available. Any CDAP method that throws a
+      RetryableException will use this policy if it encounters a RetryableException
+    </description>
+  </property>
+
+  <property>
+    <name>workflow.retry.policy.max.time.secs</name>
+    <value>60000</value>
+    <description>
+      The max elapsed time in seconds before retries are aborted.
+    </description>
+  </property>
+
+  <property>
+    <name>workflow.retry.policy.max.retries</name>
+    <value>1000</value>
+    <description>
+      The max number of retries to attempt before aborting.
+      By default, the max time will be hit before this will be hit
+    </description>
+  </property>
+
+  <property>
+    <name>workflow.retry.policy.delay.base.ms</name>
+    <value>1000</value>
+    <description>
+      The base delay between retries in milliseconds. Used by the 'fixed.delay' and 'exponential.backoff' policy types
+    </description>
+  </property>
+
+  <property>
+    <name>workflow.retry.policy.delay.max.ms</name>
+    <value>30000</value>
+    <description>
+      The maximum delay between retries in milliseconds. Only used if the policy type is 'exponential.backoff'
+    </description>
+  </property>
+
+  <!-- Worker configuration -->
+
+  <property>
+    <name>worker.retry.policy.type</name>
+    <value>exponential.backoff</value>
+    <description>
+      The type of retry policy. Must be 'none', 'fixed.delay', or 'exponential.backoff'.
+      The retry policy is used when CDAP attempted to perform an operation, but that operation failed in a retryable
+      way. The most common type of failure is if a dependent service was unavailable. For example, if a transaction
+      could not be started because the transaction service is not available. Any CDAP method that throws a
+      RetryableException will use this policy if it encounters a RetryableException
+    </description>
+  </property>
+
+  <property>
+    <name>worker.retry.policy.max.time.secs</name>
+    <value>60000</value>
+    <description>
+      The max elapsed time in seconds before retries are aborted.
+    </description>
+  </property>
+
+  <property>
+    <name>worker.retry.policy.max.retries</name>
+    <value>1000</value>
+    <description>
+      The max number of retries to attempt before aborting.
+      By default, the max time will be hit before this will be hit
+    </description>
+  </property>
+
+  <property>
+    <name>worker.retry.policy.delay.base.ms</name>
+    <value>1000</value>
+    <description>
+      The base delay between retries in milliseconds. Used by the 'fixed.delay' and 'exponential.backoff' policy types
+    </description>
+  </property>
+
+  <property>
+    <name>worker.retry.policy.delay.max.ms</name>
+    <value>30000</value>
+    <description>
+      The maximum delay between retries in milliseconds. Only used if the policy type is 'exponential.backoff'
+    </description>
+  </property>
+
+  <!-- Service configuration -->
+
+  <property>
+    <name>service.retry.policy.type</name>
+    <value>none</value>
+    <description>
+      The type of retry policy. Must be 'none', 'fixed.delay', or 'exponential.backoff'.
+      The retry policy is used when CDAP attempted to perform an operation, but that operation failed in a retryable
+      way. The most common type of failure is if a dependent service was unavailable. For example, if a transaction
+      could not be started because the transaction service is not available. Any CDAP method that throws a
+      RetryableException will use this policy if it encounters a RetryableException.
+      Defaults to 'none', since it is usually reasonable to immediately return a 503 if there is a transient error.
+    </description>
+  </property>
+
+  <property>
+    <name>service.retry.policy.max.time.secs</name>
+    <value>10</value>
+    <description>
+      The max elapsed time in seconds before retries are aborted.
+      By default this is not used since the default type is none
+    </description>
+  </property>
+
+  <property>
+    <name>service.retry.policy.max.retries</name>
+    <value>3</value>
+    <description>
+      The max number of retries to attempt before aborting.
+      By default this is not used since the default type is none
+    </description>
+  </property>
+
+  <property>
+    <name>service.retry.policy.delay.base.ms</name>
+    <value>100</value>
+    <description>
+      The base delay between retries in milliseconds. Used by the 'fixed.delay' and 'exponential.backoff' policy types.
+      By default this is not used since the default type is none
+    </description>
+  </property>
+
+  <property>
+    <name>service.retry.policy.delay.max.ms</name>
+    <value>1000</value>
+    <description>
+      The maximum delay between retries in milliseconds. Only used if the policy type is 'exponential.backoff'.
+      By default this is not used since the default type is none
+    </description>
+  </property>
+
+  <!-- Flow configuration -->
+
+  <property>
+    <name>flow.retry.policy.type</name>
+    <value>none</value>
+    <description>
+      The type of retry policy. Must be 'none', 'fixed.delay', or 'exponential.backoff'.
+      The retry policy is used when CDAP attempted to perform an operation, but that operation failed in a retryable
+      way. The most common type of failure is if a dependent service was unavailable. For example, if a transaction
+      could not be started because the transaction service is not available. Any CDAP method that throws a
+      RetryableException will use this policy if it encounters a RetryableException.
+    </description>
+  </property>
+
+  <property>
+    <name>flow.retry.policy.max.time.secs</name>
+    <value>10</value>
+    <description>
+      The max elapsed time in seconds before retries are aborted.
+      By default this is not used since the default type is none
+    </description>
+  </property>
+
+  <property>
+    <name>flow.retry.policy.max.retries</name>
+    <value>3</value>
+    <description>
+      The max number of retries to attempt before aborting.
+      By default this is not used since the default type is none
+    </description>
+  </property>
+
+  <property>
+    <name>flow.retry.policy.delay.base.ms</name>
+    <value>100</value>
+    <description>
+      The base delay between retries in milliseconds. Used by the 'fixed.delay' and 'exponential.backoff' policy types.
+      By default this is not used since the default type is none
+    </description>
+  </property>
+
+  <property>
+    <name>flow.retry.policy.delay.max.ms</name>
+    <value>1000</value>
+    <description>
+      The maximum delay between retries in milliseconds. Only used if the policy type is 'exponential.backoff'.
+      By default this is not used since the default type is none
+    </description>
+  </property>
+
 </configuration>
