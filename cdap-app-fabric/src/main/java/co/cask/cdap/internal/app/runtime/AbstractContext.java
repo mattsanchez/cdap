@@ -51,6 +51,7 @@ import co.cask.cdap.common.conf.Constants;
 import co.cask.cdap.common.lang.ClassLoaders;
 import co.cask.cdap.common.lang.CombineClassLoader;
 import co.cask.cdap.common.service.Retries;
+import co.cask.cdap.common.service.RetryStrategy;
 import co.cask.cdap.data.dataset.SystemDatasetInstantiator;
 import co.cask.cdap.data2.dataset2.DatasetFramework;
 import co.cask.cdap.data2.dataset2.DynamicDatasetCache;
@@ -108,6 +109,7 @@ public abstract class AbstractContext extends AbstractServiceDiscoverer
   private final int defaultTxTimeout;
   private final MultiThreadMessagingContext messagingContext;
   protected final DynamicDatasetCache datasetCache;
+  protected final RetryStrategy retryStrategy;
 
   private final DataTracerFactory dataTracerFactory = new DataTracerFactory() {
     @Override
@@ -140,10 +142,7 @@ public abstract class AbstractContext extends AbstractServiceDiscoverer
                             SecureStore secureStore, SecureStoreManager secureStoreManager,
                             MessagingService messagingService,
                             @Nullable PluginInstantiator pluginInstantiator) {
-    super(program.getId(),
-          SystemArguments.getRetryStrategy(programOptions.getUserArguments().asMap(),
-                                           program.getType(),
-                                           cConf));
+    super(program.getId());
 
     this.program = program;
     this.programOptions = programOptions;
@@ -152,6 +151,9 @@ public abstract class AbstractContext extends AbstractServiceDiscoverer
     this.owners = createOwners(program.getId());
     this.programMetrics = createProgramMetrics(program, runId, metricsService, metricsTags);
     this.userMetrics = new ProgramUserMetrics(programMetrics);
+    this.retryStrategy = SystemArguments.getRetryStrategy(programOptions.getUserArguments().asMap(),
+                                                          program.getType(),
+                                                          cConf);
 
     Map<String, String> runtimeArgs = new HashMap<>(programOptions.getUserArguments().asMap());
     this.logicalStartTime = ProgramRunners.updateLogicalStartTime(runtimeArgs);
