@@ -30,6 +30,9 @@ Cask Data Application Platform Release Notes
    :backlinks: none
    :depth: 2
 
+`Release 4.0.1 <http://docs.cask.co/cdap/4.0.1/index.html>`__
+=============================================================
+
 `Release 4.0.0 <http://docs.cask.co/cdap/4.0.0/index.html>`__
 =============================================================
 
@@ -186,8 +189,9 @@ Improvements
 
 - :cask-issue:`CDAP-6837` - Fixed an issue in WorkerContext that did not properly
   implement the contract of the Transactional interface. Note that this fix may cause
-  incompatibilities with previous releases in certain cases. See :ref:`API Changes,
-  CDAP-6837 <release-notes-cdap-6837>` for more details.
+  incompatibilities with previous releases in certain cases. See :ref:`API Changes, CDAP-6837 
+  <release-notes-cdap-6837>`
+  for more details.
 
 - :cask-issue:`CDAP-6862` - Updated more system services to respect the cdap-site
   parameter "master.service.memory.mb".
@@ -616,7 +620,6 @@ API Changes
           }
         }
       }
-    }
   
   This code will succeed because it handles both the "new style" of the ``WorkerContext``
   directly throwing a ``TransactionFailureException`` and at the same time handle the
@@ -642,8 +645,9 @@ API Changes
       }
     }
   
-- :cask-issue:`CDAP-7544` - The :ref:`Metadata HTTP RESTful API
-  <http-restful-api-metadata-searching>` has been modified to support sorting and
+- :cask-issue:`CDAP-7544` - The `Metadata HTTP RESTful API
+  <http://docs.cask.co/cdap/4.0.0/en/reference-manual/http-restful-api/metadata.html#http-restful-api-metadata-searching>`__
+  has been modified to support sorting and
   pagination. To do so, the API now uses additional parameters |---| ``sort``, ``offset``,
   ``limit``, ``numCursors``, and ``cursor`` |---| and the format of the results
   returned when searching has changed. Whereas previous to CDAP 4.0.0 the API returned
@@ -652,6 +656,7 @@ API Changes
 - :cask-issue:`CDAP-7796` - Two properties are changing in version 4.0.0 of the CSD:
 
   - ``log.saver.run.memory.megs`` is replaced with ``log.saver.container.memory.mb``
+  
   - ``log.saver.run.num.cores`` is replaced with ``log.saver.container.num.cores``
 
   Anyone who has modified these properties in previous versions will have to update them
@@ -790,16 +795,19 @@ Known Issues
 
 - :cask-issue:`CDAP-7175` - If you are upgrading an authorization-enabled CDAP instance,
   you will need to give the *cdap* user *ADMIN* privileges on all existing CDAP
-  namespaces. See the :ref:`Administration Manual: Upgrading <upgrading-index>` for your
-  distribution for details.
+  namespaces. See the `Administration Manual: Upgrading 
+  <http://docs.cask.co/cdap/3.5.1/en/admin-manual/upgrading/index.html#upgrading-index>`__
+  for your distribution for details.
 
 - :cask-issue:`CDAP-7179` - In CDAP 3.5.0, new ``kafka.server.*`` properties replace older
-  properties such as ``kafka.log.dir``, as described in the :ref:`Administration Manual: 
-  Appendices: cdap-site.xml <appendix-cdap-default-deprecated-properties>`. 
+  properties such as ``kafka.log.dir``, as described in the `Administration Manual: 
+  Appendices: cdap-site.xml 
+  <http://docs.cask.co/cdap/3.5.1/en/admin-manual/appendices/cdap-site.html#appendix-cdap-default-deprecated-properties>`__. 
   
   **If you are upgrading from CDAP 3.4.x to 3.5.x** and you have set a value for
-  ``kafka.log.dir`` by using Cloudera Manager's :ref:`safety-valve mechanism
-  <cloudera-installation-add-service-wizard-configuration>`, you need to change to the new
+  ``kafka.log.dir`` by using Cloudera Manager's `safety-valve mechanism
+  <http://docs.cask.co/cdap/3.5.1/en/admin-manual/installation/cloudera.html#cloudera-installation-add-service-wizard-configuration>`__,
+  you need to change to the new
   property ``kafka.server.log.dirs``, as the deprecated ``kafka.log.dir`` is being ignored
   in favor of the new property. If you don't, your custom value will be replaced with the
   default value.
@@ -883,12 +891,14 @@ Bug Fixes
 Known Issues
 ------------
 - :cask-issue:`CDAP-7179` - In CDAP 3.5.0, new ``kafka.server.*`` properties replace older
-  properties such as ``kafka.log.dir``, as described in the :ref:`Administration Manual: 
-  Appendices: cdap-site.xml <appendix-cdap-default-deprecated-properties>`. 
+  properties such as ``kafka.log.dir``, as described in the `Administration Manual: 
+  Appendices: cdap-site.xml 
+  <http://docs.cask.co/cdap/3.5.0/en/admin-manual/appendices/cdap-site.html#appendix-cdap-default-deprecated-properties>`__. 
   
   **If you are upgrading from CDAP 3.4.x to 3.5.x,** and you have set a value for
-  ``kafka.log.dir`` by using Cloudera Manager's :ref:`safety-valve mechanism
-  <cloudera-installation-add-service-wizard-configuration>`, you need to change to the
+  ``kafka.log.dir`` by using Cloudera Manager's `safety-valve mechanism
+  <http://docs.cask.co/cdap/3.5.0/en/admin-manual/installation/cloudera.html#cloudera-installation-add-service-wizard-configuration>`__,
+  you need to change to the
   new property ``kafka.server.log.dirs``, as the deprecated ``kafka.log.dir`` is being
   ignored in favor of the new property. If you don't, your custom value will be replaced
   with the default value.
@@ -1515,7 +1525,8 @@ Known Issues
   If the Hive Metastore is restarted while the CDAP Explore Service is running, the
   Explore Service remains alive, but becomes unusable. To correct, restart the CDAP Master
   |---| which will restart all services |---| as described under "Starting CDAP Services"
-  for your particular Hadoop distribution in the :ref:`Installation documentation <installation-index>`.
+  for your particular Hadoop distribution in the `Installation documentation 
+  <http://docs.cask.co/cdap/3.4.1/en/admin-manual/installation/index.html#installation-index>`__.
 
 - `CDAP-1587 <https://issues.cask.co/browse/CDAP-1587>`__ - 
   CDAP internally creates tables in the "user" space that begin with the word
@@ -1529,7 +1540,8 @@ Known Issues
   does not run on Ubuntu 14.x as of CDAP 3.0.x.
 
 - `CDAP-2721 <https://issues.cask.co/browse/CDAP-2721>`__ -
-  Metrics for :ref:`FileSets <datasets-fileset>` can show zero values even if there is
+  Metrics for `FileSets <http://docs.cask.co/cdap/3.4.1/en/developers-manual/building-blocks/datasets/fileset.html#datasets-fileset>`__
+  can show zero values even if there is
   data present, because FileSets do not emit metrics (`CDAP-587
   <https://issues.cask.co/browse/CDAP-587>`__).
   
@@ -1872,10 +1884,14 @@ Bug Fixes
 
 Deprecated and Removed Features
 -------------------------------
-- See the :ref:`CDAP 3.4.0 Javadocs <javadocs>` for a list of deprecated and removed APIs.
+- See the `CDAP 3.4.0 Javadocs 
+  <http://docs.cask.co/cdap/3.4.0/en/reference-manual/javadocs/index.html#javadocs>`__ 
+  for a list of deprecated and removed APIs.
 
 - As of *CDAP v3.4.0*, *Metadata Update Notifications* have been deprecated, pending
-  removal in a later version. The :ref:`CDAP Audit Notifications <audit-logging>` contain
+  removal in a later version. The `CDAP Audit Notifications 
+  <http://docs.cask.co/cdap/3.4.0/en/developers-manual/building-blocks/audit-logging.html#audit-logging>`__ 
+  contain
   notifications for metadata changes. Please change all uses of *Metadata Update
   Notifications* to consume only those messages from the audit feed that have the ``type``
   field set to ``METADATA_CHANGE``.
@@ -1896,7 +1912,8 @@ Known Issues
   If the Hive Metastore is restarted while the CDAP Explore Service is running, the
   Explore Service remains alive, but becomes unusable. To correct, restart the CDAP Master
   |---| which will restart all services |---| as described under "Starting CDAP Services"
-  for your particular Hadoop distribution in the :ref:`Installation documentation <installation-index>`.
+  for your particular Hadoop distribution in the `Installation documentation 
+  <http://docs.cask.co/cdap/3.4.0/en/admin-manual/installation/index.html#installation-index>`__.
 
 - `CDAP-1587 <https://issues.cask.co/browse/CDAP-1587>`__ - 
   CDAP internally creates tables in the "user" space that begin with the word
@@ -1910,7 +1927,9 @@ Known Issues
   does not run on Ubuntu 14.x as of CDAP 3.0.x.
 
 - `CDAP-2721 <https://issues.cask.co/browse/CDAP-2721>`__ -
-  Metrics for :ref:`FileSets <datasets-fileset>` can show zero values even if there is
+  Metrics for `FileSets 
+  <http://docs.cask.co/cdap/3.4.0/en/developers-manual/building-blocks/datasets/fileset.html#datasets-fileset>`__ 
+  can show zero values even if there is
   data present, because FileSets do not emit metrics (`CDAP-587
   <https://issues.cask.co/browse/CDAP-587>`__).
   
@@ -2144,7 +2163,9 @@ Bug Fixes
 Deprecated and Removed Features
 -------------------------------
 
-- See the :ref:`CDAP 3.3.1 Javadocs <javadocs>` for a list of deprecated and removed APIs.
+- See the `CDAP 3.3.1 Javadocs 
+  <http://docs.cask.co/cdap/3.3.1/en/reference-manual/javadocs/index.html#javadocs>`__ 
+  for a list of deprecated and removed APIs.
 
 - The properties ``router.ssl.webapp.bind.port``, ``router.webapp.bind.port``,
   ``router.webapp.enabled`` have been deprecated and will be removed in a future version.
@@ -2164,7 +2185,8 @@ Known Issues
   If the Hive Metastore is restarted while the CDAP Explore Service is running, the
   Explore Service remains alive, but becomes unusable. To correct, restart the CDAP Master
   |---| which will restart all services |---| as described under "Starting CDAP Services"
-  for your particular Hadoop distribution in the :ref:`Installation documentation <installation-index>`.
+  for your particular Hadoop distribution in the `Installation documentation 
+  <http://docs.cask.co/cdap/3.3.1/en/admin-manual/installation/index.html#installation-index>`__.
 
 - `CDAP-1587 <https://issues.cask.co/browse/CDAP-1587>`__ - 
   CDAP internally creates tables in the "user" space that begin with the word
@@ -2178,7 +2200,9 @@ Known Issues
   does not run on Ubuntu 14.x as of CDAP 3.0.x.
 
 - `CDAP-2721 <https://issues.cask.co/browse/CDAP-2721>`__ -
-  Metrics for :ref:`FileSets <datasets-fileset>` can show zero values even if there is
+  Metrics for `FileSets 
+  <http://docs.cask.co/cdap/3.3.1/en/developers-manual/building-blocks/datasets/fileset.html#datasets-fileset>`__ 
+  can show zero values even if there is
   data present, because FileSets do not emit metrics (`CDAP-587
   <https://issues.cask.co/browse/CDAP-587>`).
   
@@ -2472,7 +2496,8 @@ Bug Fixes
 Deprecated and Removed Features
 -------------------------------
 
-- See the :ref:`CDAP 3.3.0 Javadocs <javadocs>` for a list of deprecated and removed APIs.
+- See the `CDAP 3.3.0 Javadocs <http://docs.cask.co/cdap/3.3.0/en/reference-manual/javadocs/index.html#javadocs>`__
+  for a list of deprecated and removed APIs.
 
 - `CDAP-2481 <https://issues.cask.co/browse/CDAP-2481>`__ -
   Removed a deprecated endpoint to retrieve the status of a currently running node in a workflow.
@@ -2504,7 +2529,8 @@ Known Issues
   If the Hive Metastore is restarted while the CDAP Explore Service is running, the
   Explore Service remains alive, but becomes unusable. To correct, restart the CDAP Master
   |---| which will restart all services |---| as described under "Starting CDAP Services"
-  for your particular Hadoop distribution in the :ref:`Installation documentation <installation-index>`.
+  for your particular Hadoop distribution in the `Installation documentation 
+  <http://docs.cask.co/cdap/3.3.0/en/admin-manual/installation/index.html#installation-index>`__.
 
 - `CDAP-1587 <https://issues.cask.co/browse/CDAP-1587>`__ - 
   CDAP internally creates tables in the "user" space that begin with the word
@@ -2518,7 +2544,9 @@ Known Issues
   does not run on Ubuntu 14.x as of CDAP 3.0.x.
 
 - `CDAP-2721 <https://issues.cask.co/browse/CDAP-2721>`__ -
-  Metrics for :ref:`FileSets <datasets-fileset>` can show zero values even if there is
+  Metrics for `FileSets 
+  <http://docs.cask.co/cdap/3.3.0/en/developers-manual/building-blocks/datasets/fileset.html#datasets-fileset>`__
+  can show zero values even if there is
   data present, because FileSets do not emit metrics (`CDAP-587
   <https://issues.cask.co/browse/CDAP-587>`).
   
@@ -2622,7 +2650,8 @@ Known Issues
   If the Hive Metastore is restarted while the CDAP Explore Service is running, the
   Explore Service remains alive, but becomes unusable. To correct, restart the CDAP Master
   |---| which will restart all services |---| as described under "Starting CDAP Services"
-  for your particular Hadoop distribution in the :ref:`Installation documentation <installation-index>`.
+  for your particular Hadoop distribution in the `Installation documentation
+  <http://docs.cask.co/cdap/3.2.1/en/admin-manual/installation/index.html#installation-index>`__.
 
 - `CDAP-1587 <https://issues.cask.co/browse/CDAP-1587>`__ - 
   CDAP internally creates tables in the "user" space that begin with the word
@@ -2636,7 +2665,9 @@ Known Issues
   does not run on Ubuntu 14.x as of CDAP 3.0.x.
 
 - `CDAP-2721 <https://issues.cask.co/browse/CDAP-2721>`__ -
-  Metrics for :ref:`FileSets <datasets-fileset>` can show zero values even if there is
+  Metrics for `FileSets 
+  <http://docs.cask.co/cdap/3.2.1/en/developers-manual/building-blocks/datasets/fileset.html#datasets-fileset>`__
+  can show zero values even if there is
   data present, because FileSets do not emit metrics (`CDAP-587
   <https://issues.cask.co/browse/CDAP-587>`).
   
@@ -3067,12 +3098,15 @@ API Changes
 Deprecated and Removed Features
 -------------------------------
 
-- See the :ref:`CDAP 3.2.0 Javadocs <javadocs>` for a list of deprecated and removed APIs.
+- See the `CDAP 3.2.0 Javadocs 
+  <http://docs.cask.co/cdap/3.2.0/en/reference-manual/javadocs/index.html#javadocs>`__ 
+  for a list of deprecated and removed APIs.
 
 - `CDAP-2667 <https://issues.cask.co/browse/CDAP-2667>`__ -
   Removed application templates and adapters RESTful APIs, as these templates and adapters
   have been replaced with applications that can be controlled with the 
-  :ref:`Lifecycle HTTP RESTful API <http-restful-api-lifecycle>`.
+  `Lifecycle HTTP RESTful API
+  <http://docs.cask.co/cdap/3.2.0/en/reference-manual/http-restful-api/lifecycle.html#http-restful-api-lifecycle>`__.
 
 - `CDAP-2951 <https://issues.cask.co/browse/CDAP-2951>`__ -
   Removed deprecated methods in cdap-client.
@@ -3094,7 +3128,8 @@ Known Issues
   If the Hive Metastore is restarted while the CDAP Explore Service is running, the
   Explore Service remains alive, but becomes unusable. To correct, restart the CDAP Master
   |---| which will restart all services |---| as described under "Starting CDAP Services"
-  for your particular Hadoop distribution in the :ref:`Installation documentation <installation-index>`.
+  for your particular Hadoop distribution in the `Installation documentation 
+  <http://docs.cask.co/cdap/3.2.0/en/admin-manual/installation/index.html#installation-index>`__.
 
 - `CDAP-1587 <https://issues.cask.co/browse/CDAP-1587>`__ - 
   CDAP internally creates tables in the "user" space that begin with the word
@@ -3108,7 +3143,9 @@ Known Issues
   does not run on Ubuntu 14.x as of CDAP 3.0.x.
 
 - `CDAP-2721 <https://issues.cask.co/browse/CDAP-2721>`__ -
-  Metrics for :ref:`FileSets <datasets-fileset>` can show zero values even if there is
+  Metrics for `FileSets 
+  <http://docs.cask.co/cdap/3.2.0/en/developers-manual/building-blocks/datasets/fileset.html#datasets-fileset>`__
+  can show zero values even if there is
   data present, because FileSets do not emit metrics (`CDAP-587
   <https://issues.cask.co/browse/CDAP-587>`).
   
@@ -4110,7 +4147,9 @@ Bug Fixes
 Deprecated and Removed Features
 -------------------------------
 
-- See the :ref:`CDAP 3.1.0 Javadocs <javadocs>` for a list of deprecated and removed APIs.
+- See the `CDAP 3.1.0 Javadocs 
+  <http://docs.cask.co/cdap/3.1.0/en/reference-manual/javadocs/index.html#javadocs>`__
+  for a list of deprecated and removed APIs.
 
 
 .. _known-issues-310:
@@ -4484,8 +4523,9 @@ Known Issues
   (`CDAP-2632 <https://issues.cask.co/browse/CDAP-2632>`__,
   `CDAP-2749 <https://issues.cask.co/browse/CDAP-2749>`__).
 
-- Metrics for :ref:`TimePartitionedFileSets <datasets-timepartitioned-fileset>` can show 
-  zero values even if there is data present
+- Metrics for `TimePartitionedFileSets 
+  <http://docs.cask.co/cdap/3.0.1/en/developers-manual/building-blocks/datasets/time-partitioned-fileset.html#datasets-timepartitioned-fileset>`__
+  can show zero values even if there is data present
   (`CDAP-2721 <https://issues.cask.co/browse/CDAP-2721>`__).
   
 - In the CDAP UI: many buttons will remain in focus after being clicked, even if they
@@ -4558,11 +4598,13 @@ New Features
 
 - Built-in ETL application templates and plugins have been added (`CDAP-1767 <https://issues.cask.co/browse/CDAP-1767>`__).
 
-- New :ref:`CDAP UI <cdap-ui>`, supports creating ETL applications directly in the web UI.
-  See section below (:ref:`New User Interface <new-user-interface-300>`) for details.
+- New `CDAP UI <http://docs.cask.co/cdap/3.0.0/en/admin-manual/operations/cdap-ui.html#cdap-ui>`__,
+  supports creating ETL applications directly in the web UI.
+  See section below (`New 3.0.0 User Interface`__) for details.
 
-- Workflow logs can now be retrieved using the :ref:`CDP HTTP Logging RESTful API 
-  <http-restful-api-logging>` (`CDAP-1089 <https://issues.cask.co/browse/CDAP-1089>`__).
+- Workflow logs can now be retrieved using the `CDP HTTP Logging RESTful API 
+  <http://docs.cask.co/cdap/3.0.0/en/reference-manual/http-restful-api/logging.html#http-restful-api-logging>`__
+  (`CDAP-1089 <https://issues.cask.co/browse/CDAP-1089>`__).
   
 - Support has been added for suspending and resuming of a workflow (`CDAP-1610
   <https://issues.cask.co/browse/CDAP-1610>`__).
@@ -4577,18 +4619,23 @@ New Features
 - Logs can now be fetched based on the ``run-id`` (`CDAP-1582
   <https://issues.cask.co/browse/CDAP-1582>`__).
   
-- CDAP Tables are :ref:`now explorable <table-exploration>` (`CDAP-946
-  <https://issues.cask.co/browse/CDAP-946>`__).
+- CDAP Tables are `now explorable 
+  <http://docs.cask.co/cdap/3.0.0/en/developers-manual/data-exploration/tables.html#table-exploration>`__ 
+  (`CDAP-946 <https://issues.cask.co/browse/CDAP-946>`__).
 
-- The :ref:`CDAP CLI <cli>` supports the new `application template and adapters APIs 
-  <http://docs.cask.co/cdap/3.0.0/en/application-templates/index.html>`__. (`CDAP-1773 <https://issues.cask.co/browse/CDAP-1773>`__).
+- The `CDAP CLI <http://docs.cask.co/cdap/3.0.0/en/reference-manual/cli-api.html#cli>`__
+  supports the new `application template and adapters APIs 
+  <http://docs.cask.co/cdap/3.0.0/en/application-templates/index.html>`__. 
+  (`CDAP-1773 <https://issues.cask.co/browse/CDAP-1773>`__).
   
-- The :ref:`CDAP CLI <cli>` startup options have been changed to accommodate a new option
+- The `CDAP CLI <http://docs.cask.co/cdap/3.0.0/en/reference-manual/cli-api.html#cli>`__
+  startup options have been changed to accommodate a new option
   of executing a file containing a series of CLI commands, line-by-line.
   
 - Both `grok <http://logstash.net/docs/1.4.2/filters/grok>`__ and 
   `syslog <http://en.wikipedia.org/wiki/Syslog>`__ record formats can now be used when 
-  :ref:`setting the format of a stream <http-restful-api-stream-setting-properties>`
+  `setting the format of a stream
+  <http://docs.cask.co/cdap/3.0.0/en/reference-manual/http-restful-api/stream.html#http-restful-api-stream-setting-properties>`__
   (`CDAP-1949 <https://issues.cask.co/browse/CDAP-1949>`__).
   
 - Added HTTP RESTful endpoints for listing datasets and streams as used by adapters, 
@@ -4606,7 +4653,6 @@ New Features
 - A Batch and Real-Time Cube dataset sink has been added (`CDAP-1520 <https://issues.cask.co/browse/CDAP-1966>`__).
 
 - Metrics and status information for MapReduce on a task level is now exposed (`CDAP-1520 <https://issues.cask.co/browse/CDAP-1958>`__).
-
 
 .. _new-user-interface-300:
 
@@ -4654,7 +4700,9 @@ New User Interface
 Improvement
 -----------
 
-- The :ref:`metrics system APIs<http-restful-api-metrics>` have been revised and improved
+- The `metrics system APIs 
+  <http://docs.cask.co/cdap/3.0.0/en/reference-manual/http-restful-api/metrics.html#http-restful-api-metrics>`__
+  have been revised and improved
   (`CDAP-1596 <https://issues.cask.co/browse/CDAP-1596>`__).
 - The metrics system performance has been improved
   (`CDAP-2124 <https://issues.cask.co/browse/CDAP-2124>`__, 
@@ -4684,17 +4732,23 @@ API Changes
 - The endpoint (``POST '<base-url>/metrics/search?target=childContext[&context=<context>]'``)
   that searched for the available contexts of metrics has been deprecated, pending removal
   in a later version of CDAP (`CDAP-1998 <https://issues.cask.co/browse/CDAP-1998>`__). A
-  :ref:`replacement endpoint <http-restful-api-metrics-search-for-contexts>` is available.
+  `replacement endpoint 
+  <http://docs.cask.co/cdap/3.0.0/en/reference-manual/http-restful-api/metrics.html#http-restful-api-metrics-search-for-contexts>`__
+  is available.
 
 - The endpoint (``POST '<base-url>/metrics/search?target=metric&context=<context>'``)
   that searched for metrics in a specified context has been deprecated, pending removal
   in a later version of CDAP (`CDAP-1998 <https://issues.cask.co/browse/CDAP-1998>`__). A
-  :ref:`replacement endpoint <http-restful-api-metrics-search-for-metrics>` is available.
+  `replacement endpoint 
+  <http://docs.cask.co/cdap/3.0.0/en/reference-manual/http-restful-api/metrics.html#http-restful-api-metrics-search-for-metrics>`__
+  is available.
 
 - The endpoint (``POST '<base-url>/metrics/query?context=<context>[&groupBy=<tags>]&metric=<metric>&<time-range>'``)
   that queried for a metric has been deprecated, pending removal
   in a later version of CDAP (`CDAP-1998 <https://issues.cask.co/browse/CDAP-1998>`__). A
-  :ref:`replacement endpoint <http-restful-api-metrics-querying-a-metric>` is available.
+  `replacement endpoint 
+  <http://docs.cask.co/cdap/3.0.0/en/reference-manual/http-restful-api/metrics.html#http-restful-api-metrics-querying-a-metric>`__
+  is available.
   
 - Metrics: The tag name for service handlers in previous releases was wrongly ``"runnable"``,
   and internally represented as ``"srn"``. These metrics are now tagged as ``"handler"`` (``"hnd"``), and
@@ -4702,12 +4756,14 @@ API Changes
   that were emitted with the old tag ``"runnable"``, use ``"srn"`` to query them (instead of either
   ``"runnable"`` or ``"handler"``).
 
-- The :ref:`CDAP CLI <cli>` startup options have been changed to accommodate a new option
+- The `CDAP CLI <http://docs.cask.co/cdap/3.0.0/en/reference-manual/cli-api.html#cli>`__
+  startup options have been changed to accommodate a new option
   of executing a file containing a series of CLI commands, line-by-line.
 
 - The metrics system APIs have been improved (`CDAP-1596 <https://issues.cask.co/browse/CDAP-1596>`__).
 
-- The rules for :ref:`resolving resolution <http-restful-api-metrics-time-range>`
+- The rules for `resolving resolution 
+  <http://docs.cask.co/cdap/3.0.0/en/reference-manual/http-restful-api/metrics.html#http-restful-api-metrics-time-range>`__
   when using ``resolution=auto`` in metrics query have been changed
   (`CDAP-1922 <https://issues.cask.co/browse/CDAP-1922>`__).
 
@@ -4799,21 +4855,24 @@ General
 -------
 
 - The HTTP RESTful API v2 was deprecated, replaced with the
-  :ref:`namespaced HTTP RESTful API v3 <http-restful-api-v3>`.
+  `namespaced HTTP RESTful API v3 
+  <http://docs.cask.co/cdap/2.8.0/en/reference-manual/http-restful-api/index.html#http-restful-api-v3>`__.
 
 - Added log rotation for CDAP programs running in YARN containers
   (`CDAP-1295 <https://issues.cask.co/browse/CDAP-1295>`__).
 
 - Added the ability to submit to non-default YARN queues to provide 
-  :ref:`resource guarantees <resource-guarantees>`
+  `resource guarantees 
+  <http://docs.cask.co/cdap/2.8.0/en/admin-manual/operations/resource-guarantees.html#resource-guarantees>`__
   for CDAP Master services, CDAP programs, and Explore Queries
   (`CDAP-1417 <https://issues.cask.co/browse/CDAP-1417>`__).
 
-- Added the ability to :ref:`prune invalid transactions <tx-maintenance>`
+- Added the ability to `prune invalid transactions 
+  <http://docs.cask.co/cdap/2.8.0/en/admin-manual/operations/tx-maintenance.html#tx-maintenance>`__
   (`CDAP-1540 <https://issues.cask.co/browse/CDAP-1540>`__).
 
-- Added the ability to specify 
-  :ref:`custom logback file for CDAP programs <application-logback>`
+- Added the ability to specify `custom logback file for CDAP programs 
+  <http://docs.cask.co/cdap/2.8.0/en/developers-manual/advanced/application-logback.html#application-logback>`__
   (`CDAP-1100 <https://issues.cask.co/browse/CDAP-1100>`__).
 
 - System HTTP services now bind to all interfaces (0.0.0.0), rather than 127.0.0.1.
@@ -4873,9 +4932,10 @@ New Features
   
 - **Workers**
 
-  - Added :ref:`Worker <workers>`, a new program type that can be added to CDAP applications, 
-    used to run background processes and (beta feature) can write to streams through the
-    WorkerContext.
+  - Added `Worker 
+    <http://docs.cask.co/cdap/2.8.0/en/developers-manual/building-blocks/workers.html#workers>`__,
+    a new program type that can be added to CDAP applications, used to run background
+    processes and (beta feature) can write to streams through the WorkerContext.
     
 - **Upgrade and Data Migration Tool**
 
@@ -4901,7 +4961,8 @@ API Changes
   retrieved the schema of a dataset's underlying Hive table has been removed
   (`CDAP-1603 <https://issues.cask.co/browse/CDAP-1603>`__).
 - Endpoints have been added to retrieve the CDAP version and the current configurations of
-  CDAP and HBase (:ref:`Configuration HTTP RESTful API <http-restful-api-configuration>`).
+  CDAP and HBase (`Configuration HTTP RESTful API 
+  <http://docs.cask.co/cdap/2.8.0/en/reference-manual/http-restful-api/configuration.html#http-restful-api-configuration>`__).
 
 
 .. _known-issues-280:
@@ -5136,7 +5197,9 @@ New Features
 
 - **Datasets**
 
-  - Added :ref:`FileSet <datasets-fileset>`, a new core dataset type for working with sets of files
+  - Added `FileSet 
+    <http://docs.cask.co/cdap/2.6.0/en/developers-manual/building-blocks/datasets/fileset.html#datasets-fileset>`__,
+    a new core dataset type for working with sets of files
     (`CDAP-1 <https://issues.cask.co/browse/CDAP-1>`__).
 
 - **Spark**
@@ -5317,7 +5380,7 @@ Other Changes
 -------------
 
 - The scripts ``send-query.sh``, ``access-token.sh`` and ``access-token.bat`` has been replaced by the 
-  :ref:`CDAP Command Line Interface, <cli>` ``cdap cli``.
+  `CDAP Command Line Interface <http://docs.cask.co/cdap/2.5.1/en/reference-manual/cli-api.html#cli>`__, ``cdap cli``.
 - The CDAP Command Line Interface now uses and saves access tokens when connecting to a secure CDAP instance.
 - The CDAP Java Stream Client now allows empty String events to be sent.
 - The CDAP Python Authentication Client's ``configure()`` method now takes a dictionary rather than a filepath.
