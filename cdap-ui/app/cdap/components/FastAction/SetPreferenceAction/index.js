@@ -278,7 +278,6 @@ export default class SetPreferenceAction extends Component {
     const keyLabel = T.translate('features.FastAction.setPreferencesColumnLabel.key');
     const valueLabel = T.translate('features.FastAction.setPreferencesColumnLabel.value');
     const originLabel = T.translate('features.FastAction.setPreferencesColumnLabel.origin');
-    const statusLabel = T.translate('features.FastAction.setPreferencesColumnLabel.status');
     return (
       <div>
         <div className='inherited-preferences-label'>
@@ -294,7 +293,6 @@ export default class SetPreferenceAction extends Component {
                     {this.renderInheritedPreferencesColumnHeader(keyLabel)}
                     {this.renderInheritedPreferencesColumnHeader(valueLabel)}
                     <th>{originLabel}</th>
-                    <th>{statusLabel}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -307,7 +305,6 @@ export default class SetPreferenceAction extends Component {
                             <td>{inheritedPreference.key}</td>
                             <td>{inheritedPreference.value}</td>
                             <td>N/A</td>
-                            <td><i className='fa fa-check fa-lg'></i></td>
                           </tr>
                         );
                       })
