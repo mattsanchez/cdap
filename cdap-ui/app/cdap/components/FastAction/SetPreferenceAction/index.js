@@ -263,17 +263,19 @@ export default class SetPreferenceAction extends Component {
   }
 
   renderInheritedPreferences() {
+    const titleLabel = T.translate('features.FastAction.setPreferencesInheritedPrefsLabel');
     const keyLabel = T.translate('features.FastAction.setPreferencesColumnLabel.key');
     const valueLabel = T.translate('features.FastAction.setPreferencesColumnLabel.value');
     const originLabel = T.translate('features.FastAction.setPreferencesColumnLabel.origin');
+    let numInheritedPreferences = this.state.inheritedPreferences.length;
     return (
       <div>
         <div className='inherited-preferences-label'>
-          <h4>{T.translate('features.FastAction.setPreferencesInheritedPrefsLabel')}</h4>
+          <h4>{titleLabel} ({numInheritedPreferences})</h4>
         </div>
         <div className='inherited-preferences-list'>
         {
-          this.state.inheritedPreferences.length ?
+           numInheritedPreferences ?
             <div>
               <table>
                 <thead>
@@ -311,6 +313,10 @@ export default class SetPreferenceAction extends Component {
   }
 
   render() {
+    const actionLabel = T.translate('features.FastAction.setPreferencesActionLabel');
+    const modalLabel = T.translate('features.FastAction.setPreferencesModalLabel');
+    const savingLabel = T.translate('features.FastAction.setPreferencesButtonLabel.saving');
+    const saveAndCloseLabel = T.translate('features.FastAction.setPreferencesButtonLabel.saveAndClose');
     let tooltipID = `${this.props.entity.uniqueId}-setpreferences`;
     return (
       <span>
@@ -326,7 +332,7 @@ export default class SetPreferenceAction extends Component {
           toggle={this.toggleTooltip}
           delay={0}
         >
-          {T.translate('features.FastAction.setPreferencesActionLabel')}
+          {actionLabel}
         </Tooltip>
 
         {
@@ -346,7 +352,7 @@ export default class SetPreferenceAction extends Component {
                     className={"button-icon fa fa-wrench"}
                   />
                   <span className={"button-icon title"}>
-                    {T.translate('features.FastAction.setPreferencesModalLabel')}
+                    {modalLabel}
                   </span>
                 </div>
                 <div className="pull-right">
@@ -374,7 +380,7 @@ export default class SetPreferenceAction extends Component {
                             disabled="disabled"
                           >
                             <span className="fa fa-spinner fa-spin"></span>
-                            <span>{T.translate('features.FastAction.setPreferencesButtonLabel.saving')}</span>
+                            <span>{savingLabel}</span>
                           </button>
                         :
                           <button
@@ -382,7 +388,7 @@ export default class SetPreferenceAction extends Component {
                             onClick={this.setPreferences.bind(this)}
                             disabled={(!this.allFieldsFilled() || this.state.error) ? 'disabled' : null}
                           >
-                            <span>{T.translate('features.FastAction.setPreferencesButtonLabel')}</span>
+                            <span>{saveAndCloseLabel}</span>
                           </button>
                       }
                       {
