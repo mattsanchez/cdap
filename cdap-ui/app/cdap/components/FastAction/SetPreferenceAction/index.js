@@ -18,7 +18,6 @@ import React, {Component, PropTypes} from 'react';
 import FastActionButton from '../FastActionButton';
 import isObject from 'lodash/isObject';
 import upperFirst from 'lodash/upperFirst';
-import debounce from 'lodash/debounce';
 import orderBy from 'lodash/orderBy';
 import T from 'i18n-react';
 import shortid from 'shortid';
@@ -35,7 +34,7 @@ export default class SetPreferenceAction extends Component {
 
     this.state = {
       modal: false,
-      savedMessage: null,
+      saving: false,
       keyValues: {},
       inheritedPreferences: [],
       sortByAttribute: 'key',
@@ -53,7 +52,6 @@ export default class SetPreferenceAction extends Component {
       this.params.programType = convertProgramToApi(this.props.entity.programType);
     }
 
-    this.debouncedSetPreferences = debounce(this.debounceSetPreferences, 1000);
     this.eventText = '';
     this.toggleModal = this.toggleModal.bind(this);
     this.onKeyValueChange = this.onKeyValueChange.bind(this);
@@ -68,7 +66,7 @@ export default class SetPreferenceAction extends Component {
   toggleModal() {
     this.setState({
       modal: !this.state.modal,
-      savedMessage: null
+      saving: false
     });
   }
 
@@ -125,6 +123,7 @@ export default class SetPreferenceAction extends Component {
   }
 
   setPreferences() {
+    this.setState({saving: true});
     let setPreferencesApi = myPreferenceApi.setAppPreferences;
     if (this.props.entity.type === 'program') {
       setPreferencesApi = myPreferenceApi.setProgramPreferences;
@@ -132,10 +131,7 @@ export default class SetPreferenceAction extends Component {
     setPreferencesApi(this.params, this.getKeyValObject())
     .subscribe(
       () => {
-        this.setState({savedMessage: 'Saved'});
-        setTimeout(() => {
-          this.setState({savedMessage: null});
-        }, 3000);
+        this.toggleModal();
       },
       (error) => {
         this.setState({
@@ -187,20 +183,12 @@ export default class SetPreferenceAction extends Component {
 
   onKeyValueChange(keyValues) {
     this.setState({keyValues});
-    if (this.allFieldsFilled()) {
-      this.debouncedSetPreferences();
-    }
   }
 
   allFieldsFilled() {
     return this.state.keyValues.pairs.every((keyValuePair) => {
       return (keyValuePair.key.length > 0 && keyValuePair.value.length > 0);
     });
-  }
-
-  debounceSetPreferences() {
-    this.setState({savedMessage: 'Saving...'});
-    this.setPreferences();
   }
 
   preventPropagation(event) {
@@ -379,21 +367,27 @@ export default class SetPreferenceAction extends Component {
                   <div className="specify-preferences-container">
                     {this.renderSpecifyPreferences()}
                     <div className="clearfix">
-                      <button
-                        className="btn btn-primary pull-left"
-                        onClick={() => {this.toggleModal(); this.setPreferences();}}
-                      >
-                        <span>{T.translate('features.FastAction.setPreferencesButtonLabel')}</span>
-                      </button>
+                      {
+                        this.state.saving ?
+                          <button
+                            className="btn btn-primary pull-left"
+                            disabled="disabled"
+                          >
+                            <span className="fa fa-spinner fa-spin"></span>
+                            <span>{T.translate('features.FastAction.setPreferencesButtonLabel.saving')}</span>
+                          </button>
+                        :
+                          <button
+                            className="btn btn-primary pull-left"
+                            onClick={this.setPreferences.bind(this)}
+                            disabled={(!this.allFieldsFilled() || this.state.error) ? 'disabled' : null}
+                          >
+                            <span>{T.translate('features.FastAction.setPreferencesButtonLabel')}</span>
+                          </button>
+                      }
                       {
                         this.state.error ?
                           <span className="pull-left text-danger">{this.state.error}</span>
-                        :
-                          null
-                      }
-                      {
-                        this.state.savedMessage ?
-                          <span className="pull-left text-success">{this.state.savedMessage}</span>
                         :
                           null
                       }
