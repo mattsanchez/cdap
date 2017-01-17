@@ -134,11 +134,14 @@
             table {
               border-collapse: separate;
               width: 100%;
+              table-layout: fixed;
 
               th,
               td {
                 height: @cell-height;
                 border-bottom: 1px solid rgba(0, 0, 0, 0.2);
+                word-wrap: break-word;
+                word-break: break-all;
 
                 &:first-child {
                   width: 45%;
