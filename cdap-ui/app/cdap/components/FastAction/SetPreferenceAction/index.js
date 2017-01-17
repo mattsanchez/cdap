@@ -35,6 +35,7 @@ export default class SetPreferenceAction extends Component {
     this.state = {
       modal: false,
       saving: false,
+      fieldsResetted: false,
       keyValues: {},
       inheritedPreferences: [],
       sortByAttribute: 'key',
@@ -89,7 +90,10 @@ export default class SetPreferenceAction extends Component {
             }
           });
         } else {
-          this.setState({keyValues: {'pairs': this.getKeyValPair(res)}});
+          this.setState({
+            keyValues: {'pairs': this.getKeyValPair(res)}, 
+            fieldsResetted: true
+          });
         }
       },
       (error) => {
@@ -182,13 +186,23 @@ export default class SetPreferenceAction extends Component {
   }
 
   onKeyValueChange(keyValues) {
-    this.setState({keyValues});
+    if (!this.state.fieldsResetted) {
+      this.setState({keyValues});  
+    }
+    else {
+      this.setState({fieldsResetted: false});
+    }
   }
 
   allFieldsFilled() {
     return this.state.keyValues.pairs.every((keyValuePair) => {
       return (keyValuePair.key.length > 0 && keyValuePair.value.length > 0);
     });
+  }
+
+  resetFields(event) {
+    event.preventDefault();
+    this.getSpecifiedPreferences();
   }
 
   preventPropagation(event) {
@@ -226,6 +240,7 @@ export default class SetPreferenceAction extends Component {
             <KeyValuePairs
               keyValues = {this.state.keyValues}
               onKeyValueChange = {this.onKeyValueChange}
+              fieldsResetted = {this.state.fieldsResetted}
             />
           </div>
         </div>
@@ -317,6 +332,7 @@ export default class SetPreferenceAction extends Component {
     const modalLabel = T.translate('features.FastAction.setPreferencesModalLabel');
     const savingLabel = T.translate('features.FastAction.setPreferencesButtonLabel.saving');
     const saveAndCloseLabel = T.translate('features.FastAction.setPreferencesButtonLabel.saveAndClose');
+    const resetLink = T.translate('features.FastAction.setPreferencesReset');
     let tooltipID = `${this.props.entity.uniqueId}-setpreferences`;
     return (
       <span>
@@ -391,9 +407,12 @@ export default class SetPreferenceAction extends Component {
                             <span>{saveAndCloseLabel}</span>
                           </button>
                       }
+                      <span className="pull-left reset">
+                        <a onClick = {this.resetFields.bind(this)}>{resetLink}</a>
+                      </span>
                       {
                         this.state.error ?
-                          <span className="pull-left text-danger">{this.state.error}</span>
+                          <div className="pull-left text-danger">{this.state.error}</div>
                         :
                           null
                       }
