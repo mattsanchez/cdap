@@ -165,6 +165,9 @@ public class LogCleanupTest {
     // Setup directories
     LoggingContext dummyContext = new FlowletLoggingContext("ns", "app", "flw", "flwt", "run", "instance");
 
+    NamespaceMeta finalMetadata = new NamespaceMeta.Builder().setName("ns").build();
+    namespaceQueryAdmin.create(finalMetadata);
+
     Location namespacedLogsDir = namespacedLocationFactory.get(Id.Namespace.from("ns")).append(logBaseDir);
     Location contextDir = namespacedLogsDir.append("app").append("flw");
     List<Location> toDelete = Lists.newArrayList();
@@ -475,12 +478,94 @@ public class LogCleanupTest {
     LogCleanup logCleanup = new LogCleanup(fileMetaDataManager, rootLocationFactory, namespaceQueryAdmin,
                                            namespacedLocationFactory, logBaseDir, RETENTION_DURATION_MS, impersonator);
 
-    logCleanup.filterLocationsWithMeta(new NamespaceId("ns"), toDelete , 5);
+    logCleanup.filterLocationsWithMeta(new NamespaceId("ns"), toDelete, 5);
 
     // Assert files with metadata is not deleted
     Assert.assertEquals(0, toDelete.size());
     // delete these meta files
     logCleanup.run();
+  }
+
+  @Test
+  public void testCleanupLogFiles() throws Exception {
+    FileMetaDataManager fileMetaDataManager = injector.getInstance(FileMetaDataManager.class);
+    NamespacedLocationFactory namespacedLocationFactory = injector.getInstance(NamespacedLocationFactory.class);
+
+    // Deletion boundary
+    long deletionBoundary = System.currentTimeMillis() - RETENTION_DURATION_MS;
+    LOG.info("deletionBoundary = {}", deletionBoundary);
+
+    // Setup directories
+    LoggingContext dummyContext = new FlowletLoggingContext("ns", "app", "flw", "flwt", "run", "instance");
+
+    Location nsContextDir = createContextDir("ns", namespacedLocationFactory);
+
+    List<Location> toDelete = Lists.newArrayList();
+    for (int i = 0; i < 5; ++i) {
+      toDelete.add(nsContextDir.append("2012-12-1" + i + "/del-1"));
+      toDelete.add(nsContextDir.append("2012-12-1" + i + "/del-2"));
+      toDelete.add(nsContextDir.append("2012-12-1" + i + "/del-3"));
+      toDelete.add(nsContextDir.append("2012-12-1" + i + "/del-4"));
+    }
+
+    Assert.assertFalse(toDelete.isEmpty());
+
+    List<Location> notDelete = Lists.newArrayList();
+    for (int i = 0; i < 5; ++i) {
+      notDelete.add(nsContextDir.append("2012-12-2" + i + "/nodel-1"));
+      notDelete.add(nsContextDir.append("2012-12-2" + i + "/nodel-2"));
+      notDelete.add(nsContextDir.append("2012-12-2" + i + "/nodel-3"));
+    }
+
+    Assert.assertFalse(notDelete.isEmpty());
+
+    int counter = 0;
+    for (Location location : toDelete) {
+      long modTime = deletionBoundary - counter - 10000;
+      fileMetaDataManager.writeMetaData(dummyContext, modTime,
+                                        createFile(location, modTime));
+      counter++;
+    }
+
+    for (Location location : notDelete) {
+      long modTime = deletionBoundary + counter + 10000;
+      fileMetaDataManager.writeMetaData(dummyContext, modTime,
+                                        createFile(location, modTime));
+      counter++;
+    }
+
+    Assert.assertEquals(locationListsToString(toDelete, notDelete),
+                        toDelete.size() + notDelete.size(), fileMetaDataManager.listFiles(dummyContext).size());
+
+    LogCleanup logCleanup = new LogCleanup(fileMetaDataManager, rootLocationFactory, namespaceQueryAdmin,
+                                           namespacedLocationFactory, logBaseDir, RETENTION_DURATION_MS, impersonator);
+    final SetMultimap<String, Location> parentDirs = HashMultimap.create();
+    final Map<String, NamespaceId> namespaceIdMap = new HashMap<>();
+
+    logCleanup.cleanLogFiles(deletionBoundary, namespaceIdMap, parentDirs, 200);
+
+    for (Location location : toDelete) {
+      Assert.assertFalse("Location " + location + " is not deleted!", location.exists());
+    }
+
+    for (Location location : notDelete) {
+      Assert.assertTrue("Location " + location + " is deleted!", location.exists());
+    }
+
+    // Assert metadata for all deleted files is gone
+    NavigableMap<Long, Location> remainingFilesMap = fileMetaDataManager.listFiles(dummyContext);
+    Set<Location> metadataForDeletedFiles =
+      Sets.intersection(new HashSet<>(remainingFilesMap.values()), new HashSet<>(toDelete)).immutableCopy();
+    Assert.assertEquals(ImmutableSet.of(), metadataForDeletedFiles);
+    fileMetaDataManager.cleanMetadata(removeMetaFiles(fileMetaDataManager.listFiles(dummyContext)));
+  }
+
+  private Map<URI, NamespaceId> removeMetaFiles(NavigableMap<Long, Location> map) {
+    Map<URI, NamespaceId> metaFileMap = new HashMap<>();
+    for (Map.Entry<Long, Location> entry : map.entrySet()) {
+      metaFileMap.put(entry.getValue().toURI(), new NamespaceId("ns"));
+    }
+    return metaFileMap;
   }
 
   private Location createContextDir(String namespace, NamespacedLocationFactory namespacedLocationFactory)
