@@ -180,7 +180,7 @@ export default class MarketPlaceEntity extends Component {
             <div className="package-metadata-container">
               <strong className="package-label">{this.props.entity.label}</strong>
             </div>
-            <div className="package-version">v {this.props.entity.version}</div>
+            <div>v {this.props.entity.version}</div>
           </Card>
         )
       :
