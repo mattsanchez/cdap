@@ -26,7 +26,7 @@ import myPreferenceApi from 'api/preference';
 import {convertProgramToApi} from 'services/program-api-converter';
 import KeyValuePairs from 'components/KeyValuePairs';
 import NamespaceStore from 'services/NamespaceStore';
-require('./SetPreferenceAction.less');
+require('./SetPreferenceAction.scss');
 
 export default class SetPreferenceAction extends Component {
   constructor(props) {
@@ -318,7 +318,7 @@ export default class SetPreferenceAction extends Component {
               </table>
             </div>
           :
-            <div className="text-center">
+            <div className="text-xs-center">
               No Inherited Preferences
             </div>
         }
@@ -363,7 +363,7 @@ export default class SetPreferenceAction extends Component {
                 className="modal-header"
                 onClick={this.preventPropagation.bind(this)}
               >
-                <div className="pull-left">
+                <div className="float-xs-left">
                   <span
                     className={"button-icon fa fa-wrench"}
                   />
@@ -371,7 +371,7 @@ export default class SetPreferenceAction extends Component {
                     {modalLabel}
                   </span>
                 </div>
-                <div className="pull-right">
+                <div className="float-xs-right">
                   <div className="close-modal-btn"
                     onClick={this.toggleModal.bind(this)}
                   >
@@ -392,7 +392,7 @@ export default class SetPreferenceAction extends Component {
                       {
                         this.state.saving ?
                           <button
-                            className="btn btn-primary pull-left"
+                            className="btn btn-primary float-xs-left"
                             disabled="disabled"
                           >
                             <span className="fa fa-spinner fa-spin"></span>
@@ -400,19 +400,19 @@ export default class SetPreferenceAction extends Component {
                           </button>
                         :
                           <button
-                            className="btn btn-primary pull-left"
+                            className="btn btn-primary float-xs-left"
                             onClick={this.setPreferences.bind(this)}
                             disabled={(!this.allFieldsFilled() || this.state.error) ? 'disabled' : null}
                           >
                             <span>{saveAndCloseLabel}</span>
                           </button>
                       }
-                      <span className="pull-left reset">
+                      <span className="float-xs-left reset">
                         <a onClick = {this.resetFields.bind(this)}>{resetLink}</a>
                       </span>
                       {
                         this.state.error ?
-                          <div className="pull-left text-danger">{this.state.error}</div>
+                          <div className="float-xs-left text-danger">{this.state.error}</div>
                         :
                           null
                       }

@@ -14,12 +14,12 @@
  * the License.
  */
 
-@normal-text-font-size: 14px;
-@label-text-font-size: 18px;
-@text-field-width: 300px;
-@modal-width: 884px;
-@modal-max-height: 750px;
-@cell-height: 2.5em;
+$normal-text-font-size: 14px;
+$label-text-font-size: 18px;
+$text-field-width: 300px;
+$modal-width: 884px;
+$modal-max-height: 750px;
+$cell-height: 2.5em;
 
 .tooltip {
   .tooltip-inner {
@@ -31,8 +31,8 @@
 .modal {
   .set-preference-modal {
     .modal-content {
-      max-height: @modal-max-height;
-      width: @modal-width;
+      max-height: $modal-max-height;
+      width: $modal-width;
 
       .modal-header {
         .title {
@@ -42,11 +42,11 @@
 
       .modal-body {
         .preferences-container {
-          font-size: @normal-text-font-size;
+          font-size: $normal-text-font-size;
 
           h4 {
             margin-top: 15px;
-            font-size: @label-text-font-size;
+            font-size: $label-text-font-size;
           }
 
           .specify-preferences-container,
@@ -64,7 +64,7 @@
             tbody {
               td {
                 input {
-                  width: @text-field-width;
+                  width: $text-field-width;
                 }
               }
             }
@@ -84,7 +84,7 @@
               }
 
               .specify-preferences-values {
-                max-height: ~"calc(5 * (32px + 20px))";
+                max-height: calc(5 * (32px + 20px));
                 overflow: scroll;
 
                 .key-value-pair-preference {
@@ -154,7 +154,7 @@
 
               th,
               td {
-                height: @cell-height;
+                height: $cell-height;
                 border-bottom: 1px solid rgba(0, 0, 0, 0.2);
                 word-wrap: break-word;
                 word-break: break-all;
@@ -196,7 +196,7 @@
               tbody {
                 display: block;
                 overflow: scroll;
-                max-height: (@cell-height * 5);
+                max-height: ($cell-height * 5);
 
                 i.fa-check {
                   color: #7ed321;
