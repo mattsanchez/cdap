@@ -55,9 +55,13 @@
   }
 
   .cask-card {
+    height: 100%;
     padding: 0;
     .card-body {
+      height: 100%;
       padding-top: 25px;
+      display: flex;
+      flex-direction: column;
     }
   }
 
@@ -101,6 +105,7 @@
   }
   .package-metadata-container {
     margin-top: 5px;
+    flex: 1 1 auto;
 
     .package-label {
       font-size: 14px;
@@ -122,6 +127,7 @@
 
         .card-body {
           width: 100%;
+          height: auto;
           z-index: 2;
           background: #e8e8e8;
           text-align: left;
