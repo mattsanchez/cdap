@@ -156,13 +156,14 @@ public final class FileMetaDataManager {
 
   /**
    * Scans meta data and gathers the metadata files in batches of configurable batch size
-   * @param tableKey table key with start and stop key for row and column from where scan will be started
-   * @param batchSize batch size for number of columns to be read
+   *
+   * @param tableKey          table key with start and stop key for row and column from where scan will be started
+   * @param batchSize         batch size for number of columns to be read
    * @param metaFileProcessor Collects metadata files
    * @return next start and stop key + start column for next iteration, returns null if end of table
    */
   @Nullable
-  public TableKey scanFiles(@Nullable  final TableKey tableKey,
+  public TableKey scanFiles(@Nullable final TableKey tableKey,
                             final int batchSize, final MetaFileProcessor metaFileProcessor) {
     return execute(new TransactionExecutor.Function<Table, TableKey>() {
       @Override

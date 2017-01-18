@@ -194,7 +194,7 @@ public final class LogCleanup implements Runnable {
           });
 
           if (!fileLocation.exists()) {
-            LOG.warn("Log meta file {} does not exist, but metadata is present", fileLocation.toString());
+            LOG.warn("Log file {} does not exist, but metadata is present", fileLocation.toString());
             metaFilesToDelete.put(entry.getKey(), entry.getValue());
             count++;
           } else if (fileLocation.lastModified() < tillTime) {
@@ -205,6 +205,8 @@ public final class LogCleanup implements Runnable {
         } catch (Exception e) {
           if (e instanceof NamespaceNotFoundException) {
             LOG.warn("Namespace does not exist for {}. Going to delete metadata for it", file.toString(), e);
+            metaFilesToDelete.put(entry.getKey(), entry.getValue());
+            count++;
           } else {
             LOG.warn("Got exception while accessing path {}", file.toString(), e);
           }
