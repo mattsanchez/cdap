@@ -461,24 +461,22 @@ cdap_set_hive_classpath() {
 
 #
 # cdap_set_spark
-# Attempts to find SPARK_HOME
+# Attempts to find SPARK_HOME and setup Spark specifics env by running $SPARK_HOME/conf/spark-env.sh
 #
 cdap_set_spark() {
   local readonly __saved_stty=$(stty -g 2>/dev/null)
-  # First, see if we're set to something sane
-  if [[ -n ${SPARK_HOME} ]] && [[ -d ${SPARK_HOME} ]]; then
-    export SPARK_HOME
-    return 0 # SPARK_HOME is set, already
-  elif cdap_check_mapr; then
-    # MapR installs spark to a known location
-    SPARK_HOME=$(ls -d /opt/mapr/spark/spark-* 2>/dev/null)
-    if [[ -n ${SPARK_HOME} ]] && [[ -d ${SPARK_HOME} ]]; then
-      export SPARK_HOME
-      return 0
-    fi
-    return 1
-  else
-    if [[ $(which spark-shell 2>/dev/null) ]]; then
+  # If SPARK_HOME is either not set or is not directory, tries to auto-detect it
+  if [[ -z ${SPARK_HOME} ]] || [[ ! -d ${SPARK_HOME} ]]; then
+    if cdap_check_mapr; then
+      # MapR installs spark to a known location
+      SPARK_HOME=$(ls -d /opt/mapr/spark/spark-* 2>/dev/null)
+      if [[ -z ${SPARK_HOME} ]] || [[ ! -d ${SPARK_HOME} ]]; then
+        return 1
+      fi
+    elif [[ $(which spark-shell 2>/dev/null) ]]; then
+      # If there is no valid SPARK_HOME, we should unset the existing one if it is set
+      # Otherwise the spark-shell won't run correctly
+      unset SPARK_HOME
       ERR_FILE=$(mktemp)
       SPARK_VAR_OUT=$(echo 'for ((key, value) <- sys.env) println (key + "=" + value); exit' | spark-shell --master local 2>${ERR_FILE})
       __ret=$?
@@ -493,11 +491,34 @@ cdap_set_spark() {
         return 1
       fi
       SPARK_HOME=$(echo -e "${SPARK_VAR_OUT}" | grep ^SPARK_HOME= | cut -d= -f2)
-      export SPARK_HOME
-      return 0
     fi
-    return 1
   fi
+
+  export SPARK_HOME
+
+  # Find environment variables setup via spark-env.sh
+  SPARK_ENV_SH=${SPARK_HOME}/conf/spark-env.sh
+  if [[ -f ${SPARK_ENV_SH} ]]; then
+    if [[ -z ${SPARK_ENV_PATTERN} ]]; then
+      # By default, only get env from spark-env.sh that starts with PY or SPARK
+      SPARK_ENV_PATTERN="^(PY|SPARK)"
+    fi
+    SPARK_ENV=$(source ${SPARK_ENV_SH}; env | grep -E "${SPARK_ENV_PATTERN}")
+    __ret=$?
+    if [[ ${__ret} -eq 0 ]]; then
+      local readonly __env_out=$(mktemp)
+      echo "${SPARK_ENV}" | while read -r line; do
+        # Prefix the env variable with _SPARK_ to avoid conflicts
+        echo "export _SPARK_${line%%=*}=${line#*=}" >> ${__env_out}
+      done
+      source ${__env_out}
+      rm ${__env_out}
+    else
+      logecho "[WARN] Fail to source ${SPARK_ENV_SH} to setup environment variables for Spark"
+    fi
+  fi
+
+  return 0
 }
 
 #
