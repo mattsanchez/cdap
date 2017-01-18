@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014-2016 Cask Data, Inc.
+ * Copyright © 2014-2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -753,6 +753,7 @@ public final class Constants {
     /** Key to mark a discoverable which supports ssl */
     public static final String SSL_URI_SCHEME = "https://";
     public static final String URI_SCHEME = "http://";
+    public static final String OWNER_PRINCIPAL = "owner.principal";
 
     /**
      * App Fabric
