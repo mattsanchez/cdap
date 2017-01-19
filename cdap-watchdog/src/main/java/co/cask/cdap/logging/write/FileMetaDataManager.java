@@ -232,6 +232,7 @@ public final class FileMetaDataManager {
 
         for (ScannedEntryInfo entryInfo : entriesToRemove) {
           table.delete(entryInfo.getRowKey(), entryInfo.getColumn());
+          count++;
         }
 
         LOG.debug("Total deleted metadata entries {}", count);

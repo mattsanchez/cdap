@@ -77,8 +77,7 @@ public final class LogCleanup implements Runnable {
     this.namespacedLocationFactory = namespacedLocationFactory;
     this.logBaseDir = logBaseDir;
     this.retentionDurationMs = retentionDurationMs;
-    this.maxMetaFileScanned = cConf.getLong(LoggingConfiguration.LOG_CLEANUP_MAX_NUM_FILES,
-                                            LoggingConfiguration.DEFAULT_LOG_CLEANUP_MAX_NUM_FILES);
+    this.maxMetaFileScanned = cConf.getLong(LoggingConfiguration.LOG_CLEANUP_MAX_NUM_FILES);
     this.impersonator = impersonator;
 
     LOG.debug("Log retention duration = {} ms", retentionDurationMs);
