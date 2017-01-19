@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014-2016 Cask Data, Inc.
+ * Copyright © 2014-2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -18,6 +18,7 @@ package co.cask.cdap.logging.write;
 
 import co.cask.cdap.api.common.Bytes;
 import co.cask.cdap.common.NamespaceNotFoundException;
+import co.cask.cdap.common.conf.CConfiguration;
 import co.cask.cdap.common.io.LocationStatus;
 import co.cask.cdap.common.io.Locations;
 import co.cask.cdap.common.io.Processor;
@@ -27,6 +28,7 @@ import co.cask.cdap.common.logging.NamespaceLoggingContext;
 import co.cask.cdap.common.namespace.NamespaceQueryAdmin;
 import co.cask.cdap.common.namespace.NamespacedLocationFactory;
 import co.cask.cdap.common.security.Impersonator;
+import co.cask.cdap.logging.LoggingConfiguration;
 import co.cask.cdap.logging.context.LoggingContextHelper;
 import co.cask.cdap.proto.NamespaceMeta;
 import co.cask.cdap.proto.id.NamespaceId;
@@ -39,6 +41,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -52,7 +55,6 @@ import java.util.concurrent.Callable;
 public final class LogCleanup implements Runnable {
   private static final Logger LOG = LoggerFactory.getLogger(LogCleanup.class);
   private static final int MAX_DISK_FILES_SCANNED = 50000;
-  private static final int MAX_META_FILES_SCANNED = 1000;
 
   private final FileMetaDataManager fileMetaDataManager;
   private final RootLocationFactory rootLocationFactory;
@@ -60,6 +62,7 @@ public final class LogCleanup implements Runnable {
   private final NamespaceQueryAdmin namespaceQueryAdmin;
   private final NamespacedLocationFactory namespacedLocationFactory;
   private final long retentionDurationMs;
+  private final long maxMetaFileScanned;
   private final Impersonator impersonator;
 
   // this class takes a root location factory because for custom mapped namespaces the namespace is mapped to a
@@ -67,13 +70,15 @@ public final class LogCleanup implements Runnable {
   // locations we need to work with root based location factory
   public LogCleanup(FileMetaDataManager fileMetaDataManager, RootLocationFactory rootLocationFactory,
                     NamespaceQueryAdmin namespaceQueryAdmin, NamespacedLocationFactory namespacedLocationFactory,
-                    String logBaseDir, long retentionDurationMs, Impersonator impersonator) {
+                    String logBaseDir, long retentionDurationMs, CConfiguration cConf, Impersonator impersonator) {
     this.fileMetaDataManager = fileMetaDataManager;
     this.rootLocationFactory = rootLocationFactory;
     this.namespaceQueryAdmin = namespaceQueryAdmin;
     this.namespacedLocationFactory = namespacedLocationFactory;
     this.logBaseDir = logBaseDir;
     this.retentionDurationMs = retentionDurationMs;
+    this.maxMetaFileScanned = cConf.getLong(LoggingConfiguration.LOG_CLEANUP_MAX_NUM_FILES,
+                                            LoggingConfiguration.DEFAULT_LOG_CLEANUP_MAX_NUM_FILES);
     this.impersonator = impersonator;
 
     LOG.debug("Log retention duration = {} ms", retentionDurationMs);
@@ -87,12 +92,12 @@ public final class LogCleanup implements Runnable {
       final SetMultimap<String, Location> parentDirs = HashMultimap.create();
       final Map<String, NamespaceId> namespacedLogBaseDirMap = new HashMap<>();
 
-      cleanLogFiles(tillTime, namespacedLogBaseDirMap, parentDirs, MAX_META_FILES_SCANNED);
+      cleanupFiles(tillTime, maxMetaFileScanned, namespacedLogBaseDirMap, parentDirs);
 
       try {
         // clean log files which does not have corresponding meta data
         cleanFilesWithoutMeta(tillTime, namespacedLogBaseDirMap, parentDirs,
-                              MAX_DISK_FILES_SCANNED, MAX_META_FILES_SCANNED);
+                              MAX_DISK_FILES_SCANNED, maxMetaFileScanned);
       } catch (Exception e) {
         LOG.warn("Got exception while cleaning up disk files without meta data", e);
       }
@@ -107,13 +112,17 @@ public final class LogCleanup implements Runnable {
             public Void call() throws Exception {
               Set<Location> locations = parentDirs.get(namespacedLogBaseDir);
               for (Location location : locations) {
-                deleteEmptyDir(namespacedLogBaseDir, location);
+                try {
+                  deleteEmptyDir(namespacedLogBaseDir, location);
+                } catch (Exception e) {
+                  LOG.warn("Got exception while deleting empty directory {}", location, e);
+                }
               }
               return null;
             }
           });
         } catch (Exception e) {
-          LOG.warn("Got exception while deleting parent directories in names {}", namespaceId.getEntityName(), e);
+          LOG.warn("Got exception while deleting parent directories in namespace {}", namespaceId.getEntityName(), e);
         }
       }
     } catch (Throwable e) {
@@ -122,71 +131,46 @@ public final class LogCleanup implements Runnable {
   }
 
   /**
-   * Clean up log files for all the namespaces
-   *
-   * @param tillTime                time till the meta data will be deleted.
-   * @param namespacedLogBaseDirMap namespace to directory map
-   * @param parentDirs              parent directories for deleted files
-   * @param batchSize               batch size for metadata files to be scanned
-   * @throws Exception Any exception occurred while getting list of namespaces
-   */
-  @VisibleForTesting
-  void cleanLogFiles(final long tillTime, final Map<String, NamespaceId> namespacedLogBaseDirMap,
-                     final SetMultimap<String, Location> parentDirs,
-                     final int batchSize) throws Exception {
-    LOG.info("Starting deletion of log files older than {}", tillTime);
-
-    // Get meta files to be removed and remove disk files
-    Map<URI, NamespaceId> namespaceIdURIMap = cleanupFileLocations(tillTime, batchSize,
-                                                                   namespacedLogBaseDirMap, parentDirs);
-    // Remove meta files
-    fileMetaDataManager.cleanMetadata(namespaceIdURIMap);
-
-    LOG.info("Finished deletion of log files older than {}", tillTime);
-  }
-
-  /**
-   * Clean up disk files and return map of location and namespace
+   * Clean up metadata and disk files which are older than tillTime
    *
    * @param tillTime                time till the meta data will be deleted.
    * @param batchSize               max number files to be deleted in one iteration of log cleanup
    * @param namespacedLogBaseDirMap namespace to directory map
    * @param parentDirs              parent directories for deleted files
-   * @return map of location and namespace
    */
   @VisibleForTesting
-  Map<URI, NamespaceId> cleanupFileLocations(final long tillTime, final int batchSize,
-                                             final Map<String, NamespaceId> namespacedLogBaseDirMap,
-                                             final SetMultimap<String, Location> parentDirs) {
-    int count = 0;
+  void cleanupFiles(final long tillTime, final long batchSize,
+                    final Map<String, NamespaceId> namespacedLogBaseDirMap,
+                    final SetMultimap<String, Location> parentDirs) {
     FileMetaDataManager.TableKey nextTableKey = null;
-    Map<URI, NamespaceId> metaFilesToDelete = new HashMap<>();
 
     do {
+      long count = 0;
+      List<FileMetaDataManager.ScannedEntryInfo> metaEntriesToDelete = new ArrayList<>();
+
       // Get the log metadata in batches
-      FileMetaDataManager.MetaFileProcessor<Map<URI, NamespaceId>> metaFileProcessor =
-        new FileMetaDataManager.MetaFileProcessor<Map<URI, NamespaceId>>() {
-          Map<URI, NamespaceId> scannedFiles = new HashMap<>();
+      FileMetaDataManager.MetaEntryProcessor<List<FileMetaDataManager.ScannedEntryInfo>> metaEntryProcessor =
+        new FileMetaDataManager.MetaEntryProcessor<List<FileMetaDataManager.ScannedEntryInfo>>() {
+          List<FileMetaDataManager.ScannedEntryInfo> scannedFiles = new ArrayList<>();
 
           @Override
-          public void process(URI uri, NamespaceId namespaceId) {
-            scannedFiles.put(uri, namespaceId);
+          public void process(FileMetaDataManager.ScannedEntryInfo scannedFileInfo) {
+            scannedFiles.add(scannedFileInfo);
           }
 
           @Override
-          public Map<URI, NamespaceId> getCollectedFiles() {
+          public List<FileMetaDataManager.ScannedEntryInfo> getCollectedEntries() {
             return scannedFiles;
           }
         };
 
-      nextTableKey = fileMetaDataManager.scanFiles(nextTableKey, batchSize, metaFileProcessor);
-      Map<URI, NamespaceId> scannedMetaFiles = metaFileProcessor.getCollectedFiles();
+      nextTableKey = fileMetaDataManager.scanFiles(nextTableKey, batchSize, metaEntryProcessor);
 
-      for (Map.Entry<URI, NamespaceId> entry : scannedMetaFiles.entrySet()) {
-        final URI file = entry.getKey();
+      for (FileMetaDataManager.ScannedEntryInfo scannedEntryInfo : metaEntryProcessor.getCollectedEntries()) {
+        final URI file = scannedEntryInfo.getUri();
 
         try {
-          Location fileLocation = impersonator.doAs(entry.getValue(), new Callable<Location>() {
+          Location fileLocation = impersonator.doAs(scannedEntryInfo.getNamespace(), new Callable<Location>() {
             @Override
             public Location call() throws Exception {
               return rootLocationFactory.create(file);
@@ -195,26 +179,31 @@ public final class LogCleanup implements Runnable {
 
           if (!fileLocation.exists()) {
             LOG.warn("Log file {} does not exist, but metadata is present", fileLocation.toString());
-            metaFilesToDelete.put(entry.getKey(), entry.getValue());
+            metaEntriesToDelete.add(scannedEntryInfo);
             count++;
           } else if (fileLocation.lastModified() < tillTime) {
-            deleteLogFiles(parentDirs, namespacedLogBaseDirMap, entry.getValue(), fileLocation);
-            metaFilesToDelete.put(entry.getKey(), entry.getValue());
+            deleteLogFiles(parentDirs, namespacedLogBaseDirMap, scannedEntryInfo.getNamespace(), fileLocation);
+            metaEntriesToDelete.add(scannedEntryInfo);
             count++;
           }
+
         } catch (Exception e) {
           if (e instanceof NamespaceNotFoundException) {
             LOG.warn("Namespace does not exist for {}. Going to delete metadata for it", file.toString(), e);
-            metaFilesToDelete.put(entry.getKey(), entry.getValue());
+            metaEntriesToDelete.add(scannedEntryInfo);
             count++;
           } else {
             LOG.warn("Got exception while accessing path {}", file.toString(), e);
           }
         }
       }
-    } while (nextTableKey != null && count != batchSize);
 
-    return metaFilesToDelete;
+      LOG.debug("Collected {} number of metadata entries for deletion", count);
+
+      // Remove metadata entries
+      fileMetaDataManager.cleanMetadata(metaEntriesToDelete);
+
+    } while (nextTableKey != null);
   }
 
   /**
@@ -224,13 +213,13 @@ public final class LogCleanup implements Runnable {
    * @param namespacedLogBaseDirMap namespace to directory map
    * @param parentDirs              parent directories for deleted files
    * @param maxDiskFilesScanned     batch size for disk files to be scanned
-   * @param maxMetaFilesScanned     batch size for metadata files to be scanned
+   * @param maxMetaEntriesScanned   batch size for metadata entries to be scanned
    * @throws Exception Any exception occurred while getting list of namespaces
    */
   @VisibleForTesting
   void cleanFilesWithoutMeta(final long tillTime, final Map<String, NamespaceId> namespacedLogBaseDirMap,
                              final SetMultimap<String, Location> parentDirs, final int maxDiskFilesScanned,
-                             final int maxMetaFilesScanned) throws Exception {
+                             final long maxMetaEntriesScanned) throws Exception {
     LOG.info("Starting deletion of log files older than {} without metadata", tillTime);
     List<NamespaceMeta> namespaces = namespaceQueryAdmin.list();
     // For all the namespaces present in NamespaceMeta, gather log files from disk and log meta. Then delete the log
@@ -246,7 +235,7 @@ public final class LogCleanup implements Runnable {
           Set<Location> diskFileLocations = getDiskLocations(namespaceId, namespacedLogBaseDir, tillTime,
                                                              maxDiskFilesScanned);
           // remove log files from diskFileLocations for which metadata is present.
-          filterLocationsWithMeta(namespaceId, diskFileLocations, maxMetaFilesScanned);
+          filterLocationsWithMeta(namespaceId, diskFileLocations, maxMetaEntriesScanned);
 
           // delete all the disk locations for which metadata is not present
           for (final Location locationToDelete : diskFileLocations) {
@@ -264,13 +253,13 @@ public final class LogCleanup implements Runnable {
   /**
    * Filter all the disk files from diskFileLocations for which meta data is present
    *
-   * @param namespaceId         namespace for which metadata needs to be scanned
-   * @param diskFileLocations   log files present on disk for given namespace
-   * @param maxMetaFilesScanned max number files to be scanned in one iteration
+   * @param namespaceId           namespace for which metadata needs to be scanned
+   * @param diskFileLocations     log files present on disk for given namespace
+   * @param maxMetaEntriesScanned max number entries to be scanned in one iteration
    */
   @VisibleForTesting
   void filterLocationsWithMeta(NamespaceId namespaceId, final Set<Location> diskFileLocations,
-                               final int maxMetaFilesScanned) {
+                               final long maxMetaEntriesScanned) {
     // get the logging context for a given namespace
     LoggingContext loggingContext = new LogNamespaceLoggingContext(namespaceId.getNamespace());
     String logPartition = loggingContext.getLogPartition() + ":";
@@ -279,26 +268,26 @@ public final class LogCleanup implements Runnable {
     FileMetaDataManager.TableKey nextTableKey = new FileMetaDataManager
       .TableKey(logPartition.getBytes(), Bytes.stopKeyForPrefix(logPartition.getBytes()), null);
 
-    FileMetaDataManager.MetaFileProcessor<Set<URI>> metaFileCollector =
-      new FileMetaDataManager.MetaFileProcessor<Set<URI>>() {
+    FileMetaDataManager.MetaEntryProcessor<Set<URI>> metaEntriesCollector =
+      new FileMetaDataManager.MetaEntryProcessor<Set<URI>>() {
         Set<URI> scannedFiles = new HashSet<>();
 
         @Override
-        public void process(URI uri, NamespaceId namespaceId) {
-          scannedFiles.add(uri);
+        public void process(FileMetaDataManager.ScannedEntryInfo scannedFileInfo) {
+          scannedFiles.add(scannedFileInfo.getUri());
         }
 
         @Override
-        public Set<URI> getCollectedFiles() {
+        public Set<URI> getCollectedEntries() {
           return scannedFiles;
         }
       };
 
-    // Get all the log metadata in batches of maxMetaFilesScanned
+    // Get all the log metadata in batches of maxMetaEntriesScanned
     do {
-      nextTableKey = fileMetaDataManager.scanFiles(nextTableKey, maxMetaFilesScanned, metaFileCollector);
+      nextTableKey = fileMetaDataManager.scanFiles(nextTableKey, maxMetaEntriesScanned, metaEntriesCollector);
       // create location from scanned uris and remove all the metadata files that has corresponding disk file available
-      for (final URI uri : metaFileCollector.getCollectedFiles()) {
+      for (final URI uri : metaEntriesCollector.getCollectedEntries()) {
         try {
           Location fileLocation = impersonator.doAs(namespaceId, new Callable<Location>() {
             @Override

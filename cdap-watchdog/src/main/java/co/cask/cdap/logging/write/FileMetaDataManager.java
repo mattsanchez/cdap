@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014-2016 Cask Data, Inc.
+ * Copyright © 2014-2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -20,13 +20,10 @@ import co.cask.cdap.api.common.Bytes;
 import co.cask.cdap.api.dataset.table.Row;
 import co.cask.cdap.api.dataset.table.Scanner;
 import co.cask.cdap.api.dataset.table.Table;
-import co.cask.cdap.common.conf.CConfiguration;
 import co.cask.cdap.common.io.RootLocationFactory;
 import co.cask.cdap.common.logging.LoggingContext;
-import co.cask.cdap.common.namespace.NamespacedLocationFactory;
 import co.cask.cdap.common.security.Impersonator;
 import co.cask.cdap.data2.transaction.Transactions;
-import co.cask.cdap.logging.LoggingConfiguration;
 import co.cask.cdap.logging.context.GenericLoggingContext;
 import co.cask.cdap.logging.context.LoggingContextHelper;
 import co.cask.cdap.logging.save.LogSaverTableUtil;
@@ -43,6 +40,7 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.SortedMap;
@@ -61,8 +59,6 @@ public final class FileMetaDataManager {
   private static final NavigableMap<?, ?> EMPTY_MAP = Maps.unmodifiableNavigableMap(new TreeMap());
 
   private final RootLocationFactory rootLocationFactory;
-  private final NamespacedLocationFactory namespacedLocationFactory;
-  private final String logBaseDir;
   private final LogSaverTableUtil tableUtil;
   private final TransactionExecutorFactory transactionExecutorFactory;
   private final Impersonator impersonator;
@@ -72,14 +68,10 @@ public final class FileMetaDataManager {
   // bytes to a hbase table and to construct it back to a Location it needs to work with a root based location factory.
   @Inject
   public FileMetaDataManager(final LogSaverTableUtil tableUtil, TransactionExecutorFactory txExecutorFactory,
-                             RootLocationFactory rootLocationFactory,
-                             NamespacedLocationFactory namespacedLocationFactory, CConfiguration cConf,
-                             Impersonator impersonator) {
+                             RootLocationFactory rootLocationFactory, Impersonator impersonator) {
     this.tableUtil = tableUtil;
     this.transactionExecutorFactory = txExecutorFactory;
     this.rootLocationFactory = rootLocationFactory;
-    this.namespacedLocationFactory = namespacedLocationFactory;
-    this.logBaseDir = cConf.get(LoggingConfiguration.LOG_BASE_DIR);
     this.impersonator = impersonator;
   }
 
@@ -157,14 +149,14 @@ public final class FileMetaDataManager {
   /**
    * Scans meta data and gathers the metadata files in batches of configurable batch size
    *
-   * @param tableKey          table key with start and stop key for row and column from where scan will be started
-   * @param batchSize         batch size for number of columns to be read
-   * @param metaFileProcessor Collects metadata files
+   * @param tableKey           table key with start and stop key for row and column from where scan will be started
+   * @param batchSize          batch size for number of columns to be read
+   * @param metaEntryProcessor Collects metadata files
    * @return next start and stop key + start column for next iteration, returns null if end of table
    */
   @Nullable
   public TableKey scanFiles(@Nullable final TableKey tableKey,
-                            final int batchSize, final MetaFileProcessor metaFileProcessor) {
+                            final long batchSize, final MetaEntryProcessor metaEntryProcessor) {
     return execute(new TransactionExecutor.Function<Table, TableKey>() {
       @Override
       public TableKey apply(Table table) throws Exception {
@@ -175,7 +167,7 @@ public final class FileMetaDataManager {
 
         try (Scanner scanner = table.scan(startKey, stopKey)) {
           Row row;
-          int colCount = 0;
+          long colCount = 0;
 
           while ((row = scanner.next()) != null) {
             // Get the next logging context
@@ -201,7 +193,9 @@ public final class FileMetaDataManager {
 
               stopCol = colName;
               colCount++;
-              metaFileProcessor.process(new URI(Bytes.toString(entry.getValue())), getNamespaceId(rowKey));
+
+              metaEntryProcessor.process(new ScannedEntryInfo(rowKey, colName, getNamespaceId(rowKey),
+                                                              new URI(Bytes.toString(entry.getValue()))));
             }
             startColumn = null;
           }
@@ -226,43 +220,21 @@ public final class FileMetaDataManager {
   /**
    * Remove metadata for provided list of log files
    *
-   * @param filesToRemove Map of files to be removed to namespace
+   * @param entriesToRemove List of {@link ScannedEntryInfo} of files to be removed to namespace
    * @return count of removed meta files
    */
-  public int cleanMetadata(final Map<URI, NamespaceId> filesToRemove) {
-    return execute(new TransactionExecutor.Function<Table, Integer>() {
+  public long cleanMetadata(final List<ScannedEntryInfo> entriesToRemove) {
+    return execute(new TransactionExecutor.Function<Table, Long>() {
 
       @Override
-      public Integer apply(Table table) throws Exception {
-        int count = 0;
+      public Long apply(Table table) throws Exception {
+        long count = 0;
 
-        try (Scanner scanner = table.scan(ROW_KEY_PREFIX, ROW_KEY_PREFIX_END)) {
-          Row row;
-          while ((row = scanner.next()) != null) {
-            byte[] rowKey = row.getRow();
-
-            for (final Map.Entry<byte[], byte[]> entry : row.getColumns().entrySet()) {
-              try {
-                byte[] colName = entry.getKey();
-                URI file = new URI(Bytes.toString(entry.getValue()));
-
-                if (LOG.isDebugEnabled()) {
-                  LOG.debug("Got file {} with start time {}", file, Bytes.toLong(colName));
-                }
-                URI fileUri = new URI(Bytes.toString(entry.getValue()));
-
-                if (filesToRemove.containsKey(fileUri)) {
-                  table.delete(rowKey, colName);
-                  count++;
-                }
-              } catch (Exception e) {
-                LOG.error("Got exception deleting file {}, ignoring it.", Bytes.toString(entry.getValue()), e);
-              }
-            }
-          }
+        for (ScannedEntryInfo entryInfo : entriesToRemove) {
+          table.delete(entryInfo.getRowKey(), entryInfo.getColumn());
         }
 
-        LOG.debug("Total deleted metadata files {}", count);
+        LOG.debug("Total deleted metadata entries {}", count);
         return count;
       }
     });
@@ -296,6 +268,41 @@ public final class FileMetaDataManager {
       return startColumn;
     }
   }
+
+  /**
+   * Class which holds information about scanned meta entries
+   */
+  public static final class ScannedEntryInfo {
+    private final byte[] rowKey;
+    private final byte[] column;
+    private final NamespaceId namespace;
+    private final URI uri;
+
+
+    public ScannedEntryInfo(byte[] rowKey, byte[] column, NamespaceId namespace, URI uri) {
+      this.rowKey = rowKey;
+      this.column = column;
+      this.namespace = namespace;
+      this.uri = uri;
+    }
+
+    public byte[] getRowKey() {
+      return rowKey;
+    }
+
+    public byte[] getColumn() {
+      return column;
+    }
+
+    public NamespaceId getNamespace() {
+      return namespace;
+    }
+
+    public URI getUri() {
+      return uri;
+    }
+  }
+
 
   private void execute(TransactionExecutor.Procedure<Table> func) {
     try {
@@ -374,13 +381,13 @@ public final class FileMetaDataManager {
   }
 
   /**
-   * Meta files processor
+   * Meta entry processor
    *
    * @param <T> Type of the result of processing all the inputs
    */
-  public interface MetaFileProcessor<T> {
-    void process(URI uri, NamespaceId namespaceId);
+  public interface MetaEntryProcessor<T> {
+    void process(ScannedEntryInfo info);
 
-    T getCollectedFiles();
+    T getCollectedEntries();
   }
 }
