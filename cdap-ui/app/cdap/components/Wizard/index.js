@@ -46,8 +46,23 @@ export default class Wizard extends Component {
       activeStep: this.props.wizardConfig.steps[0].id,
       success: false,
       loading: false,
-      error: ''
+      error: '',
+      inputIsEmpty: false
     };
+
+    if (this.props.wizardType === "PublishPipeline") {
+      this.contentStore = this.props.store;
+      this.contentStore.subscribe(() => {
+        let pipelineName = this.contentStore.getState().pipelinemetadata.name;
+        if (pipelineName === "") {
+          this.setState({inputIsEmpty: true});
+        } else {
+          if (this.state.inputIsEmpty) {
+            this.setState({inputIsEmpty: false});
+          }
+        }
+      });
+    }
   }
   getChildContext() {
     return {
@@ -97,10 +112,8 @@ export default class Wizard extends Component {
           }
         );
     }
-
   }
   render() {
-
     const getNavigationButtons = function getNavigationButtons(matchedStep) {
       let matchedIndex = currentStepIndex(this.props.wizardConfig.steps, matchedStep.id);
       let navButtons;
@@ -126,6 +139,7 @@ export default class Wizard extends Component {
         <button
           className="btn btn-primary"
           onClick={this.submitForm.bind(this)}
+          disabled={this.state.inputIsEmpty ? 'disabled' : null}
         >
           Finish
         </button>
