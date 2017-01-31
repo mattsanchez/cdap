@@ -20,7 +20,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import org.apache.twill.kafka.client.FetchedMessage;
 import org.apache.twill.kafka.client.KafkaConsumer;
-import org.apache.twill.kafka.client.TopicPartition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,9 +36,9 @@ public final class PersistedMessageCallback implements KafkaConsumer.MessageCall
   private static final Logger LOG = LoggerFactory.getLogger(PersistedMessageCallback.class);
 
   private final KafkaConsumer.MessageCallback delegate;
-  private final KafkaConsumerMetaTable metaTable;
+  private final MetricsConsumerMetaTable metaTable;
   private final int persistThreshold;
-  private final Map<TopicPartition, Long> offsets;
+  private final Map<TopicPartitionMetaKey, Long> offsets;
   private final AtomicInteger messageCount;
 
   /**
@@ -48,7 +47,7 @@ public final class PersistedMessageCallback implements KafkaConsumer.MessageCall
    * on the persistThreshold.
    */
   public PersistedMessageCallback(KafkaConsumer.MessageCallback delegate,
-                                  KafkaConsumerMetaTable metaTable,
+                                  MetricsConsumerMetaTable metaTable,
                                   int persistThreshold) {
     this.delegate = delegate;
     this.metaTable = metaTable;
@@ -58,12 +57,13 @@ public final class PersistedMessageCallback implements KafkaConsumer.MessageCall
   }
 
   @Override
-  public void onReceived(Iterator<FetchedMessage> messages) {
-    delegate.onReceived(new OffsetTrackingIterator(messages));
+  public long onReceived(Iterator<FetchedMessage> messages) {
+    long offset = delegate.onReceived(new OffsetTrackingIterator(messages));
     if (messageCount.get() >= persistThreshold) {
       messageCount.set(0);
       persistOffsets();
     }
+    return offset;
   }
 
   @Override
@@ -92,7 +92,7 @@ public final class PersistedMessageCallback implements KafkaConsumer.MessageCall
   private final class OffsetTrackingIterator implements Iterator<FetchedMessage> {
 
     private final Iterator<FetchedMessage> delegate;
-    private TopicPartition lastTopicPartition;
+    private TopicPartitionMetaKey lastTopicPartition;
     private long lastOffset = -1;
 
     OffsetTrackingIterator(Iterator<FetchedMessage> delegate) {
@@ -107,7 +107,7 @@ public final class PersistedMessageCallback implements KafkaConsumer.MessageCall
     @Override
     public FetchedMessage next() {
       FetchedMessage message = delegate.next();
-      lastTopicPartition = message.getTopicPartition();
+      lastTopicPartition = new TopicPartitionMetaKey(message.getTopicPartition());
       lastOffset = message.getNextOffset();
       messageCount.incrementAndGet();
       recordOffset();

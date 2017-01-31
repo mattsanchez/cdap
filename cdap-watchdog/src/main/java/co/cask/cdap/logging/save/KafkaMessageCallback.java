@@ -23,6 +23,7 @@ import co.cask.cdap.common.logging.LoggingContext;
 import co.cask.cdap.logging.appender.kafka.LoggingEventSerializer;
 import co.cask.cdap.logging.context.LoggingContextHelper;
 import co.cask.cdap.logging.kafka.KafkaLogEvent;
+import co.cask.cdap.logging.serialize.LoggingEvent;
 import com.google.common.collect.Lists;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.twill.kafka.client.FetchedMessage;
@@ -61,27 +62,29 @@ public class KafkaMessageCallback implements KafkaConsumer.MessageCallback {
   }
 
   @Override
-  public void onReceived(Iterator<FetchedMessage> messages) {
+  public long onReceived(Iterator<FetchedMessage> messages) {
 
     try {
       if (stopLatch.await(1, TimeUnit.NANOSECONDS)) {
         // if count down occurred return
         LOG.debug("Returning since callback is cancelled.");
-        return;
+        return 0L;
       }
     } catch (InterruptedException e) {
       LOG.error("Exception: ", e);
       Thread.currentThread().interrupt();
-      return;
+      return 0L;
     }
 
+    long nextOffset = 0L;
     long oldestProcessed = Long.MAX_VALUE;
     List<KafkaLogEvent> events = Lists.newArrayList();
     while (messages.hasNext()) {
       FetchedMessage message = messages.next();
+      nextOffset = message.getNextOffset();
       try {
         GenericRecord genericRecord = serializer.toGenericRecord(message.getPayload());
-        ILoggingEvent event = serializer.fromGenericRecord(genericRecord);
+        ILoggingEvent event = LoggingEvent.decode(genericRecord);
         LOG.trace("Got event {} for partition {}", event, partition);
 
         LoggingContext loggingContext = LoggingContextHelper.getLoggingContext(event.getMDCPropertyMap());
@@ -117,6 +120,7 @@ public class KafkaMessageCallback implements KafkaConsumer.MessageCallback {
     }
 
     LOG.trace("Got {} messages from kafka", count);
+    return nextOffset;
   }
 
   @Override

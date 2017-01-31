@@ -92,6 +92,11 @@ features:
     emptyMessage: No entities found in the system.
     Cards:
       type: "Type: "
+    Errors:
+      retryNow: Retry now
+      secondsLabel: seconds.
+      tryAgain: Unable to communicate with CDAP services. Retrying in
+      timeOut: Timed out while attempting to communicate with CDAP services. Please contact your system administrator.
     SplashScreen:
       welcomeMessage: Welcome to CDAP 4.0
       welcomeMessage1: New User Interface
@@ -134,22 +139,31 @@ features:
     sendEventsLabel: Send Events
     setPreferencesModalLabel: Preferences
     setPreferencesActionLabel: Set Preferences
-    setPreferencesAppDescriptionLabel: Specify new or override existing system or namespace preferences. These preferences will be accessible in all programs within this application.
-    setPreferencesProgramDescriptionLabel: Specify new or override existing system, namespace, or application preferences. These preferences will only be accessible within this program.
-    setPreferencesButtonLabel: Done
+    setPreferencesDescriptionLabel:
+      namespace: Specify new or override existing system preferences. These preferences will be accessible in all applications within this namespace.
+      app: Specify new or override existing system or namespace preferences. These preferences will be accessible in all programs within this application.
+      program: Specify new or override existing system, namespace, or application preferences. These preferences will only be accessible within this program.
+    setPreferencesButtonLabel:
+      saveAndClose: Save & Close
+      saving: Saving
     setPreferencesInheritedPrefsLabel: Inherited Preferences
     setPreferencesColumnLabel:
       key: KEY
       value: VALUE
       origin: ORIGIN
-      status: STATUS
-
+    setPreferencesReset: Reset
     setPreferencesFailed: Error - Set Preferences Failed.
+    setPreferencesSuccess:
+      default: Preferences Saved
+      application: Application Preferences Saved
+      program: Program Preferences Saved
     start: Start
     stop: Stop
     sendEventsButtonLabel: Send
+    clearEventsButtonLabel: Clear
     sendEventsClickLabel: Click to input events.
     sendEventsFailed: Error - Send Events Failed.
+    sendEventsSuccess: Success - Events uploaded successfully.
     startConfirmLabel: Start
     stopConfirmLabel: Stop
     startConfirmation: "Are you sure you want to start the program: *_{entityId}_*?"
@@ -329,6 +343,10 @@ features:
         name: Deploy
       load_datapack:
         name: Load
+      one_step_deploy_app:
+        name: Deploy
+      one_step_deploy_plugin:
+        name: Deploy
   MarketPlaceEntity:
     Metadata:
       version: Version
@@ -355,7 +373,19 @@ features:
     Sidebar:
       extension: "Extensions:"
     NamespaceDropdown:
+      applications: Applications
+      datasets: Datasets
+      streams: Streams
       addNS: "Add Namespace"
+  Overview:
+    ProgramTab:
+      emptyMessage: No Programs found.
+      title: "Programs in {appId}:"
+      runningProgramLabel: "Number of programs running: {programCount}"
+    DatasetTab:
+      title: "Dataset Used by {appId}:"
+    SchemaTab:
+      emptyMessage: No Schema found.
   Pagination:
     dropdown-label: Page
   Resource-Center:
@@ -454,6 +484,13 @@ features:
       headerlabel: Download Information
     MarketHydratorPluginUpload:
       headerlabel: Add Hydrator Plugin
+    OneStepDeploy:
+      headerlabel: Deploy
+      Step1:
+        description: One step deploy
+        shorttitle: Deploy
+        title: Deploy
+        content: Deploy
     Skip: Skipped
     FailedMessage: Failed to {step}
     StreamCreate:
@@ -600,9 +637,13 @@ features:
       MISSING_REQUIRED_FIELDS: Please fill out all required fields
       INVALID_NAME: "Invalid column name. Column name can only be alphanumeric, '_', or '-'"
       DUPLICATE_NAME: "Column name already exist. Please choose a different name"
-      INVALID_COLUMNS: "Invalid column name {columns}. Column names can contain only A-Z, a-z, 0-9 and underscores"
-      DUPLICATE_COLUMNS: Duplicate column name {columns}
-      NO_DATA: No data to process, please upload a file, enter data to process or choose data from existing datasets
+      INVALID_COLUMNS: "Column names can contain only A-Z, a-z, 0-9 and underscores. Invalid columns: {columns} "
+      DUPLICATE_COLUMNS: "Duplicates: {columns}"
+      NO_DATA: Please upload a file, enter data to process or choose data from existing datasets
+    ErrorsShortDescription:
+      INVALID_COLUMNS: Invalid column name.
+      DUPLICATE_COLUMNS: Duplicate column name.
+      NO_DATA: No data to process.
     Explore:
       browse: "Browse Dataset ({count})"
       noData: No data
@@ -637,6 +678,7 @@ features:
         delimiter: Set delimiter
         firstLineAsColumns: First line as column name
         skipEmptyLines: Skip empty lines
+        convertToSchema: Make column names schema compatible
     LeftPanel:
       sort: Sort
       selectColumn: Select a column to enable {type}
@@ -669,4 +711,10 @@ features:
     nodeserverDown: 'User interface service is down'
   StatusAlertMessage:
     message: 'Services are back online'
+  Tags:
+    label: Tags
+    notags: No Tags added
+  Description:
+    label: Description
+    nodescription: No Description available
 ...

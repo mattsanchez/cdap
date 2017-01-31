@@ -16,6 +16,7 @@
 
 package co.cask.cdap.data2.dataset2.lib.table.hbase;
 
+import co.cask.cdap.api.common.Bytes;
 import co.cask.cdap.api.dataset.DatasetContext;
 import co.cask.cdap.api.dataset.DatasetSpecification;
 import co.cask.cdap.api.dataset.Updatable;
@@ -25,16 +26,19 @@ import co.cask.cdap.common.conf.CConfiguration;
 import co.cask.cdap.common.conf.Constants;
 import co.cask.cdap.data2.datafabric.dataset.DatasetsUtil;
 import co.cask.cdap.data2.dataset2.lib.hbase.AbstractHBaseDataSetAdmin;
+import co.cask.cdap.data2.util.hbase.ColumnFamilyDescriptorBuilder;
+import co.cask.cdap.data2.util.hbase.CoprocessorManager;
 import co.cask.cdap.data2.util.hbase.HBaseTableUtil;
-import co.cask.cdap.data2.util.hbase.HTableDescriptorBuilder;
+import co.cask.cdap.data2.util.hbase.TableDescriptorBuilder;
 import co.cask.cdap.proto.id.NamespaceId;
+import co.cask.cdap.spi.hbase.ColumnFamilyDescriptor;
+import co.cask.cdap.spi.hbase.HBaseDDLExecutor;
 import com.google.common.collect.ImmutableList;
 import com.google.gson.Gson;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.tephra.TxConstants;
 import org.apache.twill.filesystem.Location;
 import org.apache.twill.filesystem.LocationFactory;
@@ -54,7 +58,7 @@ public class HBaseTableAdmin extends AbstractHBaseDataSetAdmin implements Updata
   // todo: datasets should not depend on cdap configuration!
   private final CConfiguration conf;
 
-  private final LocationFactory locationFactory;
+  private final CoprocessorManager coprocessorManager;
 
   public HBaseTableAdmin(DatasetContext datasetContext,
                          DatasetSpecification spec,
@@ -66,55 +70,56 @@ public class HBaseTableAdmin extends AbstractHBaseDataSetAdmin implements Updata
           hConf, conf, tableUtil);
     this.spec = spec;
     this.conf = conf;
-    this.locationFactory = locationFactory;
+    this.coprocessorManager = new CoprocessorManager(conf, locationFactory, tableUtil);
   }
 
   @Override
   public void create() throws IOException {
-    HColumnDescriptor columnDescriptor =
-      new HColumnDescriptor(TableProperties.getColumnFamilyBytes(spec.getProperties()));
+    String columnFamily = Bytes.toString(TableProperties.getColumnFamilyBytes(spec.getProperties()));
+    ColumnFamilyDescriptorBuilder cfdBuilder = HBaseTableUtil.getColumnFamilyDescriptorBuilder(columnFamily, hConf);
 
     if (TableProperties.getReadlessIncrementSupport(spec.getProperties())) {
-      columnDescriptor.setMaxVersions(Integer.MAX_VALUE);
+      cfdBuilder.setMaxVersions(Integer.MAX_VALUE);
     } else if (DatasetsUtil.isTransactional(spec.getProperties())) {
       // NOTE: we cannot limit number of versions as there's no hard limit on # of excluded from read txs
-      columnDescriptor.setMaxVersions(Integer.MAX_VALUE);
+      cfdBuilder.setMaxVersions(Integer.MAX_VALUE);
     } else {
-      columnDescriptor.setMaxVersions(1);
+      cfdBuilder.setMaxVersions(1);
     }
 
-    tableUtil.setBloomFilter(columnDescriptor, HBaseTableUtil.BloomType.ROW);
+    cfdBuilder.setBloomType(ColumnFamilyDescriptor.BloomType.ROW);
 
     Long ttl = TableProperties.getTTL(spec.getProperties());
     if (ttl != null) {
       // convert ttl from seconds to milli-seconds
       ttl = TimeUnit.SECONDS.toMillis(ttl);
-      columnDescriptor.setValue(TxConstants.PROPERTY_TTL, String.valueOf(ttl));
+      cfdBuilder.addProperty(TxConstants.PROPERTY_TTL, String.valueOf(ttl));
     }
 
-    final HTableDescriptorBuilder tableDescriptor = tableUtil.buildHTableDescriptor(tableId);
-    tableDescriptor.addFamily(columnDescriptor);
+    final TableDescriptorBuilder tdBuilder = HBaseTableUtil.getTableDescriptorBuilder(tableId, cConf);
 
     // if the dataset is configured for read-less increments, then set the table property to support upgrades
     boolean supportsReadlessIncrements = TableProperties.getReadlessIncrementSupport(spec.getProperties());
     if (supportsReadlessIncrements) {
-      tableDescriptor.setValue(Table.PROPERTY_READLESS_INCREMENT, "true");
+      tdBuilder.addProperty(Table.PROPERTY_READLESS_INCREMENT, "true");
     }
 
     // if the dataset is configured to be non-transactional, then set the table property to support upgrades
     if (!DatasetsUtil.isTransactional(spec.getProperties())) {
-      tableDescriptor.setValue(Constants.Dataset.TABLE_TX_DISABLED, "true");
+      tdBuilder.addProperty(Constants.Dataset.TABLE_TX_DISABLED, "true");
       if (supportsReadlessIncrements) {
         // read-less increments CPs by default assume that table is transactional
-        columnDescriptor.setValue("dataset.table.readless.increment.transactional", "false");
+        cfdBuilder.addProperty("dataset.table.readless.increment.transactional", "false");
       }
     }
+
+    tdBuilder.addColumnFamily(cfdBuilder.build());
 
     CoprocessorJar coprocessorJar = createCoprocessorJar();
 
     for (Class<? extends Coprocessor> coprocessor : coprocessorJar.getCoprocessors()) {
-      addCoprocessor(tableDescriptor, coprocessor, coprocessorJar.getJarLocation(),
-                     coprocessorJar.getPriority(coprocessor));
+      tdBuilder.addCoprocessor(getCoprocessorDescriptor(coprocessor, coprocessorJar.getJarLocation(),
+                                                        coprocessorJar.getPriority(coprocessor)));
     }
 
     byte[][] splits = null;
@@ -123,8 +128,8 @@ public class HBaseTableAdmin extends AbstractHBaseDataSetAdmin implements Updata
       splits = GSON.fromJson(splitsProperty, byte[][].class);
     }
 
-    try (HBaseAdmin admin = new HBaseAdmin(hConf)) {
-      tableUtil.createTableIfNotExists(admin, tableId, tableDescriptor.build(), splits);
+    try (HBaseDDLExecutor ddlExecutor = ddlExecutorFactory.get()) {
+      ddlExecutor.createTableIfNotExists(tdBuilder.build(), splits);
     }
   }
 
@@ -182,16 +187,14 @@ public class HBaseTableAdmin extends AbstractHBaseDataSetAdmin implements Updata
   protected CoprocessorJar createCoprocessorJar() throws IOException {
     boolean supportsIncrement = TableProperties.getReadlessIncrementSupport(spec.getProperties());
     boolean transactional = DatasetsUtil.isTransactional(spec.getProperties());
-    return createCoprocessorJarInternal(conf, locationFactory, tableUtil, transactional, supportsIncrement);
+    return createCoprocessorJarInternal(conf, coprocessorManager, tableUtil, transactional, supportsIncrement);
   }
 
   public static CoprocessorJar createCoprocessorJarInternal(CConfiguration conf,
-                                                            LocationFactory locationFactory,
+                                                            CoprocessorManager coprocessorManager,
                                                             HBaseTableUtil tableUtil,
                                                             boolean transactional,
                                                             boolean supportsReadlessIncrement) throws IOException {
-    // create the jar for the data janitor coprocessor.
-    Location jarDir = locationFactory.create(conf.get(Constants.CFG_HDFS_LIB_DIR));
     Class<? extends Coprocessor> dataJanitorClass = tableUtil.getTransactionDataJanitorClassForVersion();
     Class<? extends Coprocessor> incrementClass = tableUtil.getIncrementHandlerClassForVersion();
     ImmutableList.Builder<Class<? extends Coprocessor>> coprocessors = ImmutableList.builder();
@@ -211,7 +214,7 @@ public class HBaseTableAdmin extends AbstractHBaseDataSetAdmin implements Updata
     if (coprocessorList.isEmpty()) {
       return CoprocessorJar.EMPTY;
     }
-    Location jarFile = HBaseTableUtil.createCoProcessorJar("table", jarDir, coprocessorList);
+    Location jarFile = coprocessorManager.ensureCoprocessorExists(CoprocessorManager.Type.TABLE);
     return new CoprocessorJar(coprocessorList, jarFile);
   }
 

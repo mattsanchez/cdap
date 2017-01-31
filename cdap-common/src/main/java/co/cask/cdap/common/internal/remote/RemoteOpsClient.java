@@ -16,6 +16,7 @@
 
 package co.cask.cdap.common.internal.remote;
 
+import co.cask.cdap.common.ServiceUnavailableException;
 import co.cask.cdap.common.conf.CConfiguration;
 import co.cask.cdap.common.conf.Constants;
 import co.cask.cdap.common.discovery.EndpointStrategy;
@@ -88,9 +89,9 @@ public class RemoteOpsClient {
   }
 
   private String resolve(String resource) {
-    Discoverable discoverable = endpointStrategySupplier.get().pick(3L, TimeUnit.SECONDS);
+    Discoverable discoverable = endpointStrategySupplier.get().pick(1L, TimeUnit.SECONDS);
     if (discoverable == null) {
-      throw new RuntimeException(String.format("Cannot discover service %s", discoverableServiceName));
+      throw new ServiceUnavailableException(discoverableServiceName);
     }
     InetSocketAddress address = discoverable.getSocketAddress();
     String scheme = Arrays.equals(Constants.Security.SSL_URI_SCHEME.getBytes(), discoverable.getPayload()) ?

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2016 Cask Data, Inc.
+ * Copyright © 2016-2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -27,6 +27,7 @@ import co.cask.cdap.data2.transaction.messaging.coprocessor.hbase98.MessageTable
 import co.cask.cdap.data2.transaction.messaging.coprocessor.hbase98.PayloadTableRegionObserver;
 import co.cask.cdap.data2.util.TableId;
 import co.cask.cdap.data2.util.hbase.ConfigurationTable;
+import co.cask.cdap.data2.util.hbase.HBaseDDLExecutorFactory;
 import co.cask.cdap.data2.util.hbase.HBaseTableUtil;
 import co.cask.cdap.data2.util.hbase.HBaseTableUtilFactory;
 import co.cask.cdap.messaging.TopicMetadata;
@@ -37,6 +38,7 @@ import co.cask.cdap.messaging.store.PayloadTable;
 import co.cask.cdap.messaging.store.TableFactory;
 import co.cask.cdap.proto.id.NamespaceId;
 import co.cask.cdap.proto.id.TopicId;
+import co.cask.cdap.spi.hbase.HBaseDDLExecutor;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Maps;
@@ -100,20 +102,25 @@ public class HBaseTableCoprocessorTestRun extends DataCleanupTest {
   private static HBaseAdmin hBaseAdmin;
   private static HBaseTableUtil tableUtil;
   private static TableFactory tableFactory;
+  private static HBaseDDLExecutor ddlExecutor;
 
   @BeforeClass
   public static void setupBeforeClass() throws Exception {
     hConf = HBASE_TEST_BASE.getConfiguration();
+    hConf.set(HBaseTableUtil.CFG_HBASE_TABLE_COMPRESSION, HBaseTableUtil.CompressionType.NONE.name());
+
     cConf.set(Constants.CFG_LOCAL_DATA_DIR, TEMP_FOLDER.newFolder().getAbsolutePath());
     cConf.set(Constants.CFG_HDFS_NAMESPACE, cConf.get(Constants.CFG_LOCAL_DATA_DIR));
     cConf.set(Constants.CFG_HDFS_USER, System.getProperty("user.name"));
-    cConf.set(Constants.MessagingSystem.COPROCESSOR_METADATA_CACHE_EXPIRATION_SECONDS, Long.toString(CACHE_EXPIRY));
+    // Reduce the metadata cache refresh frequency for unit tests
+    cConf.set(Constants.MessagingSystem.COPROCESSOR_METADATA_CACHE_UPDATE_FREQUENCY_SECONDS, Long.toString(1L));
 
     hBaseAdmin = HBASE_TEST_BASE.getHBaseAdmin();
     hBaseAdmin.getConfiguration().set(HBaseTableUtil.CFG_HBASE_TABLE_COMPRESSION,
                                       HBaseTableUtil.CompressionType.NONE.name());
     tableUtil = new HBaseTableUtilFactory(cConf).get();
-    tableUtil.createNamespaceIfNotExists(hBaseAdmin, tableUtil.getHBaseNamespace(NamespaceId.SYSTEM));
+    ddlExecutor = new HBaseDDLExecutorFactory(cConf, hConf).get();
+    ddlExecutor.createNamespaceIfNotExists(tableUtil.getHBaseNamespace(NamespaceId.SYSTEM));
 
     LocationFactory locationFactory = getInjector().getInstance(LocationFactory.class);
     tableFactory = new HBaseTableFactory(cConf, hBaseAdmin.getConfiguration(), tableUtil, locationFactory);
@@ -194,8 +201,9 @@ public class HBaseTableCoprocessorTestRun extends DataCleanupTest {
 
   @AfterClass
   public static void teardownAfterClass() throws Exception {
-    tableUtil.deleteAllInNamespace(hBaseAdmin, tableUtil.getHBaseNamespace(NamespaceId.SYSTEM));
-    tableUtil.deleteNamespaceIfExists(hBaseAdmin, tableUtil.getHBaseNamespace(NamespaceId.SYSTEM));
+    tableUtil.deleteAllInNamespace(ddlExecutor, tableUtil.getHBaseNamespace(NamespaceId.SYSTEM), hConf);
+    ddlExecutor.deleteNamespaceIfExists(tableUtil.getHBaseNamespace(NamespaceId.SYSTEM));
+    ddlExecutor.close();
     hBaseAdmin.close();
   }
 

@@ -25,6 +25,8 @@ import shortid from 'shortid';
 import MyUserStoreApi from 'api/userstore';
 import NamespaceStore from 'services/NamespaceStore';
 import {MyPipelineApi} from 'api/pipeline';
+import ee from 'event-emitter';
+import globalEvents from 'services/global-events';
 
 import T from 'i18n-react';
 
@@ -32,10 +34,23 @@ export default class PublishPipelineWizard extends Component {
   constructor(props) {
     super(props);
     this.state = {
-      showWizard: this.props.isOpen
+      showWizard: this.props.isOpen,
+      pipelineNameIsEmpty: false
     };
 
     this.setDefaultConfig();
+
+    PublishPipelineWizardStore.subscribe(() => {
+      let pipelineName = PublishPipelineWizardStore.getState().pipelinemetadata.name;
+      if (pipelineName === "") {
+        this.setState({pipelineNameIsEmpty: true});
+      } else {
+        if (this.state.pipelineNameIsEmpty) {
+          this.setState({pipelineNameIsEmpty: false});
+        }
+      }
+    });
+    this.eventEmitter = ee(ee);
   }
 
   setDefaultConfig() {
@@ -103,6 +118,10 @@ export default class PublishPipelineWizard extends Component {
           res.property.hydratorDrafts[currentNamespace] = res.property.hydratorDrafts[currentNamespace] || {};
           res.property.hydratorDrafts[currentNamespace][draftId] = draftConfig;
           return MyUserStoreApi.set({}, res.property);
+        })
+        .map((res) => {
+          this.eventEmitter.emit(globalEvents.PUBLISHPIPELINE);
+          return res;
         });
     }
     if (this.props.input.action.type === 'create_pipeline') {
@@ -114,7 +133,11 @@ export default class PublishPipelineWizard extends Component {
             artifact,
             config: pipelineConfig
           }
-        );
+        )
+        .map((res) => {
+          this.eventEmitter.emit(globalEvents.PUBLISHPIPELINE);
+          return res;
+        });
     }
   }
   render() {
@@ -137,7 +160,9 @@ export default class PublishPipelineWizard extends Component {
                 wizardType="PublishPipeline"
                 onSubmit={this.publishPipeline.bind(this)}
                 onClose={this.toggleWizard.bind(this)}
-                store={PublishPipelineWizardStore}/>
+                store={PublishPipelineWizardStore}
+                finishButtonDisabled={this.state.pipelineNameIsEmpty}
+              />
             </WizardModal>
           :
             null

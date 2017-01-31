@@ -23,9 +23,15 @@ var autoprefixer = require('autoprefixer');
 var StyleLintPlugin = require('stylelint-webpack-plugin');
 
 var plugins = [
-  new webpack.optimize.CommonsChunkPlugin("common", "common.js", Infinity),
+  new webpack.DllReferencePlugin({
+    context: path.resolve(__dirname, 'dll'),
+    manifest: require(path.join(__dirname, 'dll', '/shared-vendor-manifest.json'))
+  }),
+  new webpack.DllReferencePlugin({
+    context: path.resolve(__dirname, 'dll'),
+    manifest: require(path.join(__dirname, 'dll') + "/wrangler-vendor-manifest.json")
+  }),
   new LodashModuleReplacementPlugin,
-  new LiveReloadPlugin(),
   new webpack.optimize.DedupePlugin(),
   new CopyWebpackPlugin([
     {
@@ -56,22 +62,6 @@ var plugins = [
 ];
 var mode = process.env.NODE_ENV;
 
-if (mode === 'production' || mode === 'build') {
-  plugins.push(
-    new webpack.DefinePlugin({
-      'process.env':{
-        'NODE_ENV': JSON.stringify("production"),
-        '__DEVTOOLS__': false
-      },
-    }),
-    new webpack.optimize.UglifyJsPlugin({
-      compress: {
-          warnings: false
-      }
-    })
-  );
-}
-
 var loaders = [
   {
     test: /\.scss$/,
@@ -86,10 +76,15 @@ var loaders = [
     loader: 'style-loader!css-loader!sass-loader'
   },
   {
+
     test: /\.js$/,
     loader: 'babel',
     exclude: /node_modules/,
+    include: [
+      path.join(__dirname, 'app')
+    ],
     query: {
+      cacheDirectory: true,
       plugins: ['lodash'],
       presets: ['react', 'es2015']
     }
@@ -104,32 +99,10 @@ var loaders = [
   }
 ];
 
-module.exports = {
+var webpackConfig = {
   context: __dirname + '/app/wrangler',
   entry: {
-    'wrangler': ['./wrangler.js'],
-    'common': [
-      'react',
-      'react-dom',
-      'redux',
-      'lodash',
-      'classnames',
-      'rx',
-      'reactstrap',
-      'react-addons-css-transition-group',
-      'i18n-react',
-      'react-dropzone',
-      'react-redux',
-      'react-file-download',
-      'papaparse',
-      'rx-dom',
-      'd3',
-      'chart.js',
-      'reactabular-table',
-      'reactabular-sticky',
-      'reactabular-virtualized',
-      'reactabular-resizable'
-    ]
+    'wrangler': ['./wrangler.js', 'rx', 'rx-dom']
   },
   module: {
     preLoaders: [
@@ -157,7 +130,7 @@ module.exports = {
     filename: './[name].js',
     path: __dirname + '/wrangler_dist/wrangler_assets'
   },
-  plugins: plugins,
+  plugins,
   resolve: {
     alias: {
       components: __dirname + '/app/cdap/components',
@@ -165,5 +138,39 @@ module.exports = {
       api: __dirname + '/app/cdap/api',
       wrangler: __dirname + '/app/wrangler'
     }
-  }
+  },
+  stats: {
+    chunks: false
+  },
 };
+
+if (mode === 'production') {
+  plugins.push(
+    new webpack.DefinePlugin({
+      'process.env':{
+        'NODE_ENV': JSON.stringify("production"),
+        '__DEVTOOLS__': false
+      },
+    }),
+    new webpack.optimize.UglifyJsPlugin({
+      compress: {
+          warnings: false
+      }
+    })
+  );
+  webpackConfig = Object.assign({}, webpackConfig, {
+    plugins
+  });
+}
+if (mode !== 'production') {
+  webpackConfig = Object.assign({}, webpackConfig, {
+    devtool: 'source-map',
+    plugins: plugins.concat([
+      new LiveReloadPlugin({
+        appendScriptTag: true
+      })
+    ])
+  });
+}
+
+module.exports = webpackConfig;

@@ -1,11 +1,11 @@
 .. meta::
     :author: Cask Data, Inc.
     :description: CDAP Virtual Machine
-    :copyright: Copyright © 2014-2016 Cask Data, Inc.
+    :copyright: Copyright © 2014-2017 Cask Data, Inc.
 
-============================================
+=====================
 Virtual Machine Image
-============================================
+=====================
 
 .. index:: VM, Virtual, Machine
 
@@ -32,7 +32,7 @@ It has pre-installed all the software that you need to run and develop CDAP appl
 - Maven is installed and configured to work for CDAP.
 - Both IntelliJ IDEA and Eclipse IDE are installed and available through desktop links once the
   virtual machine has started.
-- Links on the desktop are provided to the CDAP SDK, CDAP UI, and CDAP documentation.
+- Links on the desktop are provided to the CDAP SDK, CDAP UI, CDAP Examples, and CDAP documentation.
 - The Chromium web browser is included. The default page for the CDAP UI, available through a desktop link, is
   :cdap-ui:`http://localhost:11011/ <>`.
 
@@ -41,22 +41,40 @@ remove software, the admin user and password are both ``cdap``.
 
 .. include:: ../dev-env.rst  
    :start-line: 7
-   :end-line: 23
+   :end-line: 22
 
-.. tabbed-parsed-literal::
-   :tabs: "Linux Virtual Machine"
-   :independent:
+.. ifconfig:: snapshot_version
 
-   $ mvn archetype:generate \
-       -DarchetypeGroupId=co.cask.cdap \
-       -DarchetypeArtifactId=cdap-app-archetype \
-       -DarchetypeVersion=\ |release|
+  .. tabbed-parsed-literal::
+    :tabs: "Linux Virtual Machine"
+    :independent:
+  
+    $ mvn archetype:generate \
+        -DarchetypeGroupId=co.cask.cdap \
+        -DarchetypeArtifactId=cdap-app-archetype \
+        |archetype-repository| \
+        |archetype-version| \
+        -DartifactId=myExampleApp \
+        -DgroupId=org.example.app
+
+.. ifconfig:: not snapshot_version
+
+  .. tabbed-parsed-literal::
+    :tabs: "Linux Virtual Machine"
+    :independent:
+
+    $ mvn archetype:generate \
+        -DarchetypeGroupId=co.cask.cdap \
+        -DarchetypeArtifactId=cdap-app-archetype \
+        |archetype-version| \
+        -DartifactId=myExampleApp \
+        -DgroupId=org.example.app
 
 .. include:: ../dev-env.rst  
-   :start-line: 30
+   :start-line: 46
 
 Starting and Stopping Standalone CDAP
-============================================
+=====================================
 
 Use the ``cdap`` script (located in ``/opt/cdap/sdk/bin``) to start and stop the Standalone CDAP:
 

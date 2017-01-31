@@ -50,8 +50,8 @@ import co.cask.cdap.data.stream.StreamAdminModules;
 import co.cask.cdap.data.view.ViewAdminModules;
 import co.cask.cdap.data2.audit.AuditModule;
 import co.cask.cdap.data2.datafabric.dataset.service.DatasetService;
-import co.cask.cdap.data2.transaction.queue.QueueConstants;
 import co.cask.cdap.data2.util.hbase.ConfigurationTable;
+import co.cask.cdap.data2.util.hbase.HBaseDDLExecutorFactory;
 import co.cask.cdap.data2.util.hbase.HBaseTableUtil;
 import co.cask.cdap.data2.util.hbase.HBaseTableUtilFactory;
 import co.cask.cdap.explore.client.ExploreClient;
@@ -78,6 +78,7 @@ import co.cask.cdap.security.authorization.AuthorizationEnforcementModule;
 import co.cask.cdap.security.authorization.AuthorizationEnforcementService;
 import co.cask.cdap.security.authorization.AuthorizerInstantiator;
 import co.cask.cdap.security.guice.SecureStoreModules;
+import co.cask.cdap.spi.hbase.HBaseDDLExecutor;
 import co.cask.cdap.store.guice.NamespaceStoreModule;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Charsets;
@@ -130,8 +131,10 @@ import org.apache.zookeeper.KeeperException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
@@ -248,11 +251,10 @@ public class MasterServiceMain extends DaemonMain {
   public void start() throws Exception {
     logAppenderInitializer.initialize();
     createDirectory("twill");
-    createDirectory(cConf.get(QueueConstants.ConfigKeys.QUEUE_TABLE_COPROCESSOR_DIR,
-                              QueueConstants.DEFAULT_QUEUE_TABLE_COPROCESSOR_DIR));
     createDirectory(cConf.get(Constants.MessagingSystem.COPROCESSOR_DIR));
     createSystemHBaseNamespace();
     updateConfigurationTable();
+    saveShutdownTime(0L); // Reset shutdown time
     Services.startAndWait(zkClient, cConf.getLong(Constants.Zookeeper.CLIENT_STARTUP_TIMEOUT_MILLIS),
                           TimeUnit.MILLISECONDS,
                           String.format("Connection timed out while trying to start ZooKeeper client. Please " +
@@ -295,7 +297,7 @@ public class MasterServiceMain extends DaemonMain {
     } catch (AccessControlException | ParentNotDirectoryException | FileNotFoundException e) {
       // just log the exception
       LOG.error("Exception while trying to create directory at {}", path, e);
-    }  catch (IOException e) {
+    } catch (IOException e) {
       throw Throwables.propagate(e);
     }
   }
@@ -455,8 +457,8 @@ public class MasterServiceMain extends DaemonMain {
    */
   private void createSystemHBaseNamespace() {
     HBaseTableUtil tableUtil = new HBaseTableUtilFactory(cConf).get();
-    try (HBaseAdmin admin = new HBaseAdmin(hConf)) {
-      tableUtil.createNamespaceIfNotExists(admin, tableUtil.getHBaseNamespace(NamespaceId.SYSTEM));
+    try (HBaseDDLExecutor ddlExecutor = new HBaseDDLExecutorFactory(cConf, hConf).get()) {
+      ddlExecutor.createNamespaceIfNotExists(tableUtil.getHBaseNamespace(NamespaceId.SYSTEM));
     } catch (IOException e) {
       throw Throwables.propagate(e);
     }
@@ -471,6 +473,22 @@ public class MasterServiceMain extends DaemonMain {
       new ConfigurationTable(hConf).write(ConfigurationTable.Type.DEFAULT, cConf);
     } catch (IOException ioe) {
       throw Throwables.propagate(ioe);
+    }
+  }
+
+  /**
+   * The replication Status tool will use CDAP shutdown time to determine last CDAP related writes to HBase.
+   */
+  private void saveShutdownTime(Long timestamp) {
+    File shutdownTimeFile = new File(System.getProperty("java.io.tmpdir"),
+                                     Constants.Replication.CDAP_SHUTDOWN_TIME_FILENAME);
+    try (BufferedWriter bw = new BufferedWriter(new FileWriter(shutdownTimeFile))) {
+      //Write shutdown time
+      bw.write(timestamp.toString());
+      bw.close();
+      LOG.info("Saved CDAP shutdown time {} at file {}", timestamp, shutdownTimeFile.getAbsolutePath());
+    } catch (IOException e) {
+      LOG.error("Failed to save CDAP shutdown time", e);
     }
   }
 
@@ -665,6 +683,7 @@ public class MasterServiceMain extends DaemonMain {
       }
       services.clear();
       stopQuietly(twillRunner);
+      saveShutdownTime(System.currentTimeMillis());
       Closeables.closeQuietly(authorizerInstantiator);
       Closeables.closeQuietly(exploreClient);
     }
@@ -855,7 +874,8 @@ public class MasterServiceMain extends DaemonMain {
           }
 
           // Add a listener to delete temp files when application started/terminated.
-          TwillController controller = preparer.start();
+          TwillController controller = preparer.start(cConf.getLong(Constants.AppFabric.PROGRAM_MAX_START_SECONDS),
+                                                      TimeUnit.SECONDS);
           Runnable cleanup = new Runnable() {
             @Override
             public void run() {

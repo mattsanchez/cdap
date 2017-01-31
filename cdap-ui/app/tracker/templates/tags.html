@@ -70,7 +70,14 @@
     </div>
     <div ng-if="TagsController.tags.preferredTags.length === 0"
         class="well text-center">
-      <p>No preferred tags to display.</p>
+      <div class="loading-search" ng-if="TagsController.loadingTags">
+        <div class="container-fluid">
+          <h3>
+            <span class="fa fa-spinner fa-spin"></span>
+          </h3>
+        </div>
+      </div>
+      <p ng-if="!TagsController.loadingTags">No preferred tags to display.</p>
     </div>
   </div>
   <div class="col-sm-6 user-tags">
@@ -112,7 +119,14 @@
     </div>
     <div ng-if="TagsController.tags.userTags.length === 0"
         class="well text-center">
-      <p>No user tags to display.</p>
+      <div class="loading-search" ng-if="TagsController.loadingTags">
+        <div class="container-fluid">
+          <h3>
+            <span class="fa fa-spinner fa-spin"></span>
+          </h3>
+        </div>
+      </div>
+      <p ng-if="!TagsController.loadingTags">No user tags to display.</p>
     </div>
   </div>
 </div>

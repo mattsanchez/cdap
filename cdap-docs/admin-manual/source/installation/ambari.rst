@@ -1,6 +1,6 @@
 .. meta::
     :author: Cask Data, Inc.
-    :copyright: Copyright © 2016 Cask Data, Inc.
+    :copyright: Copyright © 2016-2017 Cask Data, Inc.
 
 :section-numbering: true
 
@@ -34,7 +34,7 @@ Preparing the Cluster
 .. include:: ../_includes/installation/hadoop-configuration.txt
       
 You can make these changes during the configuration of your cluster `using Ambari 
-<http://docs.hortonworks.com/HDPDocuments/Ambari-2.2.0.0/bk_Installing_HDP_AMB/content/_customize_services.html>`__.
+<http://docs.hortonworks.com/HDPDocuments/Ambari-2.4.2.0/bk_ambari-installation/content/customize_services.html>`__.
 
 .. HDFS Permissions
 .. ----------------
@@ -58,9 +58,7 @@ Cask repository on your Ambari server.
 
 The **repository version** (shown in the commands below as |literal-cdap-slash-short-version|) 
 must match the **CDAP series** which you’d like installed on your cluster. To install the
-**latest** version of the *CDAP 3.0 series,* you would install the *CDAP 3.0 repository.*
-The default (in the commands below) is to use **cdap/3.3**, which has the widest
-compatibility with the Ambari-supported Hadoop distributions.
+**latest** version of the *CDAP 4.1 series,* you would install the *CDAP 4.1 repository.*
 
 Replace |---| in the commands that follow on this page |---| all references to |literal-cdap-slash-short-version|
 with the CDAP Repository from the list below that you would like to use:
@@ -72,6 +70,12 @@ with the CDAP Repository from the list below that you would like to use:
 +----------------+-----------------+-------------------------+
 | CDAP Series    | CDAP Repository | Hadoop Distributions    |
 +================+=================+=========================+
+| CDAP 4.1.x     | ``cdap/4.1``    | HDP 2.0 through HDP 2.5 |
++----------------+-----------------+-------------------------+
+| CDAP 4.0.x     | ``cdap/4.0``    | HDP 2.0 through HDP 2.5 |
++----------------+-----------------+-------------------------+
+| CDAP 3.6.x     | ``cdap/3.6``    | HDP 2.0 through HDP 2.4 |
++----------------+-----------------+-------------------------+
 | CDAP 3.5.x     | ``cdap/3.5``    | HDP 2.0 through HDP 2.4 |
 +----------------+-----------------+-------------------------+
 | CDAP 3.4.x     | ``cdap/3.4``    | HDP 2.0 through HDP 2.4 |
@@ -348,6 +352,74 @@ adjusting the YARN ``min.user.id`` (to 500) to include the ``cdap`` user. (As Am
 not have a mechanism for setting the YARN ``allowed.system.users`` |---| the preferred
 method of enabling the ``cdap`` user as it is more precise and limited |---| the setting
 of ``min.user.id`` needs to be used instead.)
+
+A. If you are **adding CDAP** to an existing Kerberos cluster, in order to configure **CDAP for
+   Kerberos authentication**:
+   
+   #. The ``<cdap-principal>`` is shown in the commands that follow as ``cdap``;
+      however, you are free to use a different appropriate name.
+
+      .. highlight:: console
+      
+   #. When running on a secure HBase cluster, as the ``hbase`` user, issue the command::
+
+        $ echo "grant 'cdap', 'RWCA'" | hbase shell
+
+   #. In order to configure **CDAP Explore Service for secure Hadoop:**
+ 
+      .. highlight:: xml
+ 
+      i. To allow CDAP to act as a Hive client, it must be given ``proxyuser`` permissions and allowed
+         from all hosts. For example: set the following properties in the configuration file ``core-site.xml``, 
+         where ``cdap`` is a system group to which the ``cdap`` user is a member::
+   
+           <property>
+             <name>hadoop.proxyuser.hive.groups</name>
+             <value>cdap,hadoop,hive</value>
+           </property>
+           <property>
+             <name>hadoop.proxyuser.hive.hosts</name>
+             <value>*</value>
+           </property>
+   
+      #. To execute Hive queries on a secure cluster, the cluster must be running the MapReduce ``JobHistoryServer`` 
+         service. Consult your distribution documentation on the proper configuration of this service.
+         
+      #. To execute Hive queries on a secure cluster using the CDAP Explore Service, the Hive MetaStore service 
+         must be configured for Kerberos authentication. Consult your distribution documentation on the proper 
+         configuration of the Hive MetaStore service.
+ 
+      With all these properties set, the CDAP Explore Service will run on secure Hadoop clusters.
+
+B. If you are **adding Kerberos** to an existing cluster, in order to configure **CDAP for
+   Kerberos authentication**:
+   
+   .. highlight:: console
+
+   #. The ``/cdap`` directory needs to be owned by the ``<cdap-principal>``; you can set
+      that by running the following command as the ``hdfs`` user (change the ownership in the 
+      command from ``cdap`` to whatever is the ``<cdap-principal>``)::
+   
+        $ su hdfs && hadoop fs -mkdir -p /cdap && hadoop fs -chown cdap /cdap
+        
+   #. When converting an existing CDAP cluster to being Kerberos-enabled, you may
+      run into YARN usercache directory permission problems. A non-Kerberos cluster with
+      default settings will run CDAP containers as the user ``yarn``. A Kerberos cluster will
+      run them as the user ``cdap``. When converting, the usercache directory that YARN
+      creates will already exist and be owned by a different user. On all datanodes, run this
+      command, substituting in the correct value of the YARN parameter ``yarn.nodemanager.local-dirs``::
+    
+        $ rm -rf <YARN.NODEMANAGER.LOCAL-DIRS>/usercache/cdap
+  
+      (As ``yarn.nodemanager.local-dirs`` can be a comma-separated list of directories, you may
+      need to run this command multiple times, once for each entry.)
+  
+      If, for example, the setting for ``yarn.nodemanager.local-dirs`` is ``/yarn/nm``, you would use::
+  
+        $ rm -rf /yarn/nm/usercache/cdap
+  
+      Restart CDAP after removing the usercache(s).
+
 
 .. _ambari-configuration-highly-available:
 

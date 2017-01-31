@@ -31,7 +31,7 @@ $cdap-gray:             rgb(238, 238, 238); // #eeeeee
 $program-text:          rgb(150, 150, 150); // #969696
 
 // overrides from default bootstrap
-
+$table-border-color:    $gray;
 $brand-primary:         rgb(90, 132, 228);  // #5a84e4
 $brand-success:         rgb(74, 182, 60);   // #4ab63c
 $brand-info:            rgb(102, 110, 131); // #666e83
@@ -90,13 +90,16 @@ $wrangler-dark-color: #31313d;
 $navbar-bg: #464a56;
 
 $artifact-entity-header-bg: #6399AB;
-$application-entity-header-bg: #6D7A82;
+$application-entity-header-bg: #2c3e50;
 $datapipeline-entity-header-bg: $hydrator-blue;
 $datasetinstance-entity-header-bg: #5DAFDB;
 $stream-entity-header-bg:  #336699;
-
+$success-message-bg: #7ed321;
 
 $streamview-entity-header-bg: #1abc9c;
-$program-entity-header-bg: #2c3e50;
+$program-entity-header-bg: rgba(41, 177, 159,1);
 $height-of-header: 50px;
 $height-of-footer: 53px;
+
+// EntityListView variables
+$overview-width: 626px;

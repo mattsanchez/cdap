@@ -28,6 +28,7 @@ module.exports = {
   }
 };
 var pkg = require('../package.json');
+var path = require('path');
 var express = require('express'),
     cookieParser = require('cookie-parser'),
     compression = require('compression'),
@@ -37,24 +38,13 @@ var express = require('express'),
     uuid = require('node-uuid'),
     log4js = require('log4js'),
     bodyParser = require('body-parser'),
-    DIST_PATH = require('path').normalize(
-      __dirname + '/../dist'
-    ),
-    OLD_DIST_PATH = require('path').normalize(
-      __dirname + '/../old_dist'
-    ),
-    LOGIN_DIST_PATH= require('path').normalize(
-      __dirname + '/../login_dist'
-    ),
-    CDAP_DIST_PATH=require('path').normalize(
-      __dirname + '/../cdap_dist'
-    ),
-    WRANGLER_DIST_PATH=require('path').normalize(
-      __dirname + '/../wrangler_dist'
-    ),
-    MARKET_DIST_PATH=require('path').normalize(
-      __dirname + '/../common_dist'
-    ),
+    DLL_PATH = path.normalize(__dirname + '/../dll'),
+    DIST_PATH = path.normalize(__dirname + '/../dist'),
+    OLD_DIST_PATH = path.normalize(__dirname + '/../old_dist'),
+    LOGIN_DIST_PATH= path.normalize(__dirname + '/../login_dist'),
+    CDAP_DIST_PATH= path.normalize(__dirname + '/../cdap_dist'),
+    WRANGLER_DIST_PATH= path.normalize(__dirname + '/../wrangler_dist'),
+    MARKET_DIST_PATH= path.normalize(__dirname + '/../common_dist'),
     fs = require('fs');
 
 var log = log4js.getLogger('default');
@@ -103,7 +93,7 @@ function makeApp (authAddress, cdapConfig, uiSettings) {
       hydrator: {
         previewEnabled: cdapConfig['enable.preview'] === 'true'
       },
-      sslEnabled: cdapConfig['ssl.enabled'] === 'true',
+      sslEnabled: cdapConfig['ssl.external.enabled'] === 'true',
       securityEnabled: authAddress.enabled,
       isEnterprise: process.env.NODE_ENV === 'production'
     });
@@ -149,6 +139,42 @@ function makeApp (authAddress, cdapConfig, uiSettings) {
       log.error('Error downloading query: ', e);
     });
 
+  });
+
+  /**
+   * This is used to stream content from Market directly to CDAP
+   * ie. download app from market, and publish to CDAP
+   *
+   * Query parameters:
+   *    source: Link to the content to forward
+   *    sourceMethod: HTTP method to obtain content (default to GET)
+   *    target: CDAP API
+   *    targetMethod: HTTP method for the CDAP API (default to POST)
+   **/
+  app.get('/forwardMarketToCdap', function(req, res) {
+    var sourceLink = req.query.source,
+        targetLink = req.query.target,
+        sourceMethod = req.query.sourceMethod || 'GET',
+        targetMethod = req.query.targetMethod || 'POST';
+
+    var forwardRequestObject = {
+      url: targetLink,
+      method: targetMethod,
+      headers: req.headers
+    };
+
+    request({
+      url: sourceLink,
+      method: sourceMethod
+    })
+    .on('error', function (e) {
+      log.error('Error', e);
+    })
+    .pipe(request(forwardRequestObject))
+    .on('error', function (e) {
+      log.error('Error', e);
+    })
+    .pipe(res);
   });
 
   app.get('/downloadLogs', function(req, res) {
@@ -227,12 +253,12 @@ function makeApp (authAddress, cdapConfig, uiSettings) {
   app.post('/namespaces/:namespace/:path(*)', function (req, res) {
     var protocol,
         port;
-    if (cdapConfig['ssl.enabled'] === 'true') {
+    if (cdapConfig['ssl.external.enabled'] === 'true') {
       protocol = 'https://';
     } else {
       protocol = 'http://';
     }
-    if (cdapConfig['ssl.enabled'] === 'true') {
+    if (cdapConfig['ssl.external.enabled'] === 'true') {
       port = cdapConfig['router.ssl.bind.port'];
     } else {
       port = cdapConfig['router.server.port'];
@@ -293,6 +319,14 @@ function makeApp (authAddress, cdapConfig, uiSettings) {
       finalhandler(req, res)(false); // 404
     }
   ]);
+  app.use('/dll_assets', [
+    express.static(DLL_PATH, {
+      index: false
+    }),
+    function(req, res) {
+      finalhandler(req, res)(false);
+    }
+  ]);
   app.use('/wrangler_assets', [
     express.static(WRANGLER_DIST_PATH + '/wrangler_assets', {
       index: false
@@ -335,7 +369,8 @@ function makeApp (authAddress, cdapConfig, uiSettings) {
     request(opts,
       function (nerr, nres, nbody) {
         if (nerr || nres.statusCode !== 200) {
-          res.status(nres.statusCode).send(nbody);
+          var statusCode = (nres ? nres.statusCode : 500) || 500;
+          res.status(statusCode).send(nbody);
         } else {
           res.send(nbody);
         }
@@ -372,13 +407,13 @@ function makeApp (authAddress, cdapConfig, uiSettings) {
     function (req, res) {
       var protocol,
           port;
-      if (cdapConfig['ssl.enabled'] === 'true') {
+      if (cdapConfig['ssl.external.enabled'] === 'true') {
         protocol = 'https://';
       } else {
         protocol = 'http://';
       }
 
-      if (cdapConfig['ssl.enabled'] === 'true') {
+      if (cdapConfig['ssl.external.enabled'] === 'true') {
         port = cdapConfig['router.ssl.bind.port'];
       } else {
         port = cdapConfig['router.server.port'];
@@ -572,7 +607,7 @@ function makeApp (authAddress, cdapConfig, uiSettings) {
       hydrator: {
         previewEnabled: cdapConfig['enable.alpha.preview'] === 'true'
       },
-      sslEnabled: cdapConfig['ssl.enabled'] === 'true',
+      sslEnabled: cdapConfig['ssl.external.enabled'] === 'true',
       securityEnabled: authAddress.enabled,
       isEnterprise: process.env.NODE_ENV === 'production'
     });

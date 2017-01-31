@@ -14,6 +14,8 @@
  * the License.
  */
 var webpack = require('webpack');
+var mode = process.env.NODE_ENV;
+
 var plugins = [
   new webpack.optimize.DedupePlugin(),
   new webpack.optimize.CommonsChunkPlugin("common-lib", "common-lib.js", Infinity),
@@ -23,14 +25,6 @@ var plugins = [
       'NODE_ENV': JSON.stringify("production"),
       '__DEVTOOLS__': false
     },
-  }),
-  new webpack.optimize.UglifyJsPlugin({
-    compress: {
-      warnings: false
-    },
-    output: {
-      comments: false
-    }
   })
 ];
 var loaders = [
@@ -64,8 +58,7 @@ var loaders = [
     loader: 'file-loader'
   }
 ];
-
-module.exports = {
+var webpackConfig = {
   context: __dirname + '/app/common',
   entry: {
     'common': ['./cask-header.js'],
@@ -75,6 +68,7 @@ module.exports = {
       'i18n-react',
       'sockjs-client',
       'rx',
+      'rx-dom',
       'react-dropzone',
       'react-redux'
     ]
@@ -139,5 +133,29 @@ module.exports = {
       wrangler: __dirname + '/app/wrangler'
     }
   },
+  stats: {
+    chunks: false
+  },
   plugins
 };
+if (mode !== 'production') {
+  webpackConfig = Object.assign({}, webpackConfig, {
+    devtool: 'source-map'
+  });
+}
+if (mode === 'production') {
+  plugins.push(
+    new webpack.optimize.UglifyJsPlugin({
+      compress: {
+        warnings: false
+      },
+      output: {
+        comments: false
+      }
+    })
+  );
+  webpackConfig = Object.assign({}, webpackConfig, {
+    plugins
+  });
+}
+module.exports = webpackConfig;

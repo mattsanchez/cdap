@@ -21,16 +21,17 @@ import co.cask.cdap.common.guice.ConfigModule;
 import co.cask.cdap.common.guice.LocationRuntimeModule;
 import co.cask.cdap.common.guice.NamespaceClientUnitTestModule;
 import co.cask.cdap.data.hbase.HBaseTestBase;
+import co.cask.cdap.data2.util.hbase.HBaseDDLExecutorFactory;
 import co.cask.cdap.data2.util.hbase.HBaseTableUtil;
 import co.cask.cdap.data2.util.hbase.HBaseTableUtilFactory;
 import co.cask.cdap.messaging.store.MetadataTable;
 import co.cask.cdap.messaging.store.MetadataTableTest;
 import co.cask.cdap.messaging.store.TableFactory;
 import co.cask.cdap.proto.id.NamespaceId;
+import co.cask.cdap.spi.hbase.HBaseDDLExecutor;
 import com.google.inject.Guice;
 import com.google.inject.Injector;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.twill.filesystem.LocationFactory;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -49,28 +50,28 @@ public class HBaseMetadataTableTestRun extends MetadataTableTest {
   private static final CConfiguration cConf = CConfiguration.create();
 
   private static Configuration hConf;
-  private static HBaseAdmin hBaseAdmin;
   private static HBaseTableUtil tableUtil;
   private static TableFactory tableFactory;
+  private static HBaseDDLExecutor ddlExecutor;
 
   @BeforeClass
   public static void setupBeforeClass() throws Exception {
     hConf = HBASE_TEST_BASE.getConfiguration();
-    hBaseAdmin = HBASE_TEST_BASE.getHBaseAdmin();
-    hBaseAdmin.getConfiguration().set(HBaseTableUtil.CFG_HBASE_TABLE_COMPRESSION,
-                                      HBaseTableUtil.CompressionType.NONE.name());
+    hConf.set(HBaseTableUtil.CFG_HBASE_TABLE_COMPRESSION, HBaseTableUtil.CompressionType.NONE.name());
+
     tableUtil = new HBaseTableUtilFactory(cConf).get();
-    tableUtil.createNamespaceIfNotExists(hBaseAdmin, tableUtil.getHBaseNamespace(NamespaceId.SYSTEM));
+    ddlExecutor = new HBaseDDLExecutorFactory(cConf, hConf).get();
+    ddlExecutor.createNamespaceIfNotExists(tableUtil.getHBaseNamespace(NamespaceId.SYSTEM));
 
     LocationFactory locationFactory = getInjector().getInstance(LocationFactory.class);
-    tableFactory = new HBaseTableFactory(cConf, hBaseAdmin.getConfiguration(), tableUtil, locationFactory);
+    tableFactory = new HBaseTableFactory(cConf, hConf, tableUtil, locationFactory);
   }
 
   @AfterClass
   public static void teardownAfterClass() throws Exception {
-    tableUtil.deleteAllInNamespace(hBaseAdmin, tableUtil.getHBaseNamespace(NamespaceId.SYSTEM));
-    tableUtil.deleteNamespaceIfExists(hBaseAdmin, tableUtil.getHBaseNamespace(NamespaceId.SYSTEM));
-    hBaseAdmin.close();
+    tableUtil.deleteAllInNamespace(ddlExecutor, tableUtil.getHBaseNamespace(NamespaceId.SYSTEM), hConf);
+    ddlExecutor.deleteNamespaceIfExists(tableUtil.getHBaseNamespace(NamespaceId.SYSTEM));
+    ddlExecutor.close();
   }
 
   @Override

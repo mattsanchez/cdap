@@ -41,13 +41,13 @@ import co.cask.cdap.internal.app.runtime.SimpleProgramOptions;
 import co.cask.cdap.internal.app.runtime.SystemArguments;
 import co.cask.cdap.internal.app.runtime.codec.ArgumentsCodec;
 import co.cask.cdap.internal.app.runtime.codec.ProgramOptionsCodec;
+import co.cask.cdap.internal.app.runtime.spark.SparkUtils;
 import co.cask.cdap.proto.id.NamespaceId;
 import co.cask.cdap.security.TokenSecureStoreUpdater;
 import co.cask.cdap.security.store.SecureStoreUtils;
 import com.google.common.base.Charsets;
 import com.google.common.base.Function;
 import com.google.common.base.Throwables;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Maps;
 import com.google.common.io.Files;
@@ -84,9 +84,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 
@@ -105,7 +109,6 @@ public abstract class AbstractDistributedProgramRunner implements ProgramRunner,
   private static final String CDAP_CONF_FILE_NAME = "cConf.xml";
   private static final String APP_SPEC_FILE_NAME = "appSpec.json";
   private static final String LOGBACK_FILE_NAME = "logback.xml";
-  private static final JarCacheTracker jarCacheTracker = JarCacheTracker.INSTANCE;
 
   protected final YarnConfiguration hConf;
   protected final CConfiguration cConf;
@@ -119,6 +122,25 @@ public abstract class AbstractDistributedProgramRunner implements ProgramRunner,
    */
   protected abstract class ApplicationLauncher {
 
+    protected final List<String> classPaths = new ArrayList<>();
+    protected final Set<Class<?>> dependencies = new LinkedHashSet<>();
+    protected final Map<String, String> env = new LinkedHashMap<>();
+
+    public ApplicationLauncher addClassPaths(Iterable<String> classpaths) {
+      Iterables.addAll(this.classPaths, classpaths);
+      return this;
+    }
+
+    public ApplicationLauncher addDependencies(Iterable<? extends Class<?>> dependencies) {
+      Iterables.addAll(this.dependencies, dependencies);
+      return this;
+    }
+
+    public ApplicationLauncher addEnvironment(Map<String, String> env) {
+      this.env.putAll(env);
+      return this;
+    }
+
     /**
      * Starts the given application through Twill.
      *
@@ -126,36 +148,7 @@ public abstract class AbstractDistributedProgramRunner implements ProgramRunner,
      *
      * @return the {@link TwillController} for the application.
      */
-    public TwillController launch(TwillApplication twillApplication) {
-      return launch(twillApplication, Collections.<String>emptyList(), Collections.<Class<?>>emptyList());
-    }
-
-    /**
-     * Starts the given application through Twill with extra classpaths appended to the end of the classpath of
-     * the runnables inside the applications.
-     *
-     * @param twillApplication the application to start
-     * @param extraClassPaths to append
-     *
-     * @return the {@link TwillController} for the application.
-     * @see TwillPreparer#withClassPaths(Iterable)
-     */
-    public TwillController launch(TwillApplication twillApplication, String...extraClassPaths) {
-      return launch(twillApplication, Arrays.asList(extraClassPaths), Collections.<Class<?>>emptyList());
-    }
-
-    /**
-     * Starts the given application through Twill with extra classpaths appended to the end of the classpath of
-     * the runnables inside the applications.
-     *
-     * @param twillApplication the application to start
-     * @param extraClassPaths to append
-     *
-     * @return the {@link TwillController} for the application.
-     * @see TwillPreparer#withClassPaths(Iterable)
-     */
-    public abstract TwillController launch(TwillApplication twillApplication, Iterable<String> extraClassPaths,
-                                           Iterable<? extends Class<?>> extraDependencies);
+    public abstract TwillController launch(TwillApplication twillApplication);
   }
 
   protected AbstractDistributedProgramRunner(TwillRunner twillRunner, YarnConfiguration hConf, CConfiguration cConf,
@@ -250,17 +243,9 @@ public abstract class AbstractDistributedProgramRunner implements ProgramRunner,
 
           return launch(program, options, localizeResources, tempDir, new ApplicationLauncher() {
             @Override
-            public TwillController launch(TwillApplication twillApplication, Iterable<String> extraClassPaths,
-                                          Iterable<? extends Class<?>> extraDependencies) {
+            public TwillController launch(TwillApplication twillApplication) {
               TwillPreparer twillPreparer = twillRunner.prepare(twillApplication);
-              // TODO: CDAP-5506. It's a bit hacky to set a Spark environment here. However, we always launch
-              // Spark using YARN and it is needed for both Workflow and Spark runner. We need to set it
-              // because inside Spark code, it will set and unset the SPARK_YARN_MODE system properties, causing
-              // fork in distributed mode not working. Setting it in the environment, which Spark uses for defaults,
-              // so it can't be unset by Spark
-              Iterables.addAll(additionalClassPaths, extraClassPaths);
-              twillPreparer.withEnv(ImmutableMap.of("SPARK_YARN_MODE", "true",
-                                                    "CDAP_LOG_DIR", ApplicationConstants.LOG_DIR_EXPANSION_VAR));
+              Iterables.addAll(additionalClassPaths, classPaths);
               if (options.isDebug()) {
                 twillPreparer.enableDebugging();
               }
@@ -303,20 +288,37 @@ public abstract class AbstractDistributedProgramRunner implements ProgramRunner,
 
               Iterable<Class<?>> dependencies = Iterables.concat(
                 Collections.singletonList(HBaseTableUtilFactory.getHBaseTableUtilClass()),
-                getKMSSecureStore(cConf), extraDependencies);
+                getKMSSecureStore(cConf), this.dependencies);
 
               Iterable<String> yarnAppClassPath = Arrays.asList(
                 hConf.getTrimmedStrings(YarnConfiguration.YARN_APPLICATION_CLASSPATH,
                                         YarnConfiguration.DEFAULT_YARN_APPLICATION_CLASSPATH));
 
+              // Setup the environment for the container
+              Map<String, String> env = new LinkedHashMap<>(this.env);
+              // This is for logback xml
+              env.put("CDAP_LOG_DIR", ApplicationConstants.LOG_DIR_EXPANSION_VAR);
+
+              URL sparkAssemblyJar = null;
+              try {
+                sparkAssemblyJar = SparkUtils.locateSparkAssemblyJar().toURI().toURL();
+              } catch (Exception e) {
+                // It's ok if spark is not available. No need to log anything
+              }
+
+              final URL finalSparkAssemblyJar = sparkAssemblyJar;
               twillPreparer
                 .withDependencies(dependencies)
                 .withClassPaths(Iterables.concat(additionalClassPaths, yarnAppClassPath))
+                .withEnv(env)
                 .withApplicationClassPaths(yarnAppClassPath)
                 .withBundlerClassAcceptor(new HadoopClassExcluder() {
                   @Override
                   public boolean accept(String className, URL classUrl, URL classPathUrl) {
                     // Exclude both hadoop and spark classes.
+                    if (finalSparkAssemblyJar != null && finalSparkAssemblyJar.equals(classPathUrl)) {
+                      return false;
+                    }
                     return super.accept(className, classUrl, classPathUrl)
                       && !className.startsWith("org.apache.spark.");
                   }
@@ -330,20 +332,6 @@ public abstract class AbstractDistributedProgramRunner implements ProgramRunner,
                   "--" + RunnableOptions.PROGRAM_ID, GSON.toJson(program.getId())
                 );
 
-              // Hack for CDAP-7021. Interacts with the patched YarnTwillPreparer class to cache
-              // appmaster and container jars.
-              File tmpDir = new File(cConf.get(Constants.CFG_LOCAL_DATA_DIR), cConf.get(Constants.AppFabric.TEMP_DIR));
-              File jarCacheDir = new File(tmpDir, "twillcache");
-              File programTypeDir = new File(jarCacheDir, program.getType().name().toLowerCase());
-              DirUtils.mkdirs(programTypeDir);
-              twillPreparer.withApplicationArguments("cdap.jar.cache.dir=" + programTypeDir.getAbsolutePath());
-              jarCacheTracker.registerLaunch(programTypeDir, program.getType());
-
-              // Hacks for TWILL-187
-              twillPreparer.withApplicationArguments(
-                "app.max.start.seconds=" + cConf.get(Constants.AppFabric.PROGRAM_MAX_START_SECONDS),
-                "app.max.stop.seconds=" + cConf.get(Constants.AppFabric.PROGRAM_MAX_STOP_SECONDS));
-
               TwillController twillController;
               // Change the context classloader to the combine classloader of this ProgramRunner and
               // all the classloaders of the dependencies classes so that Twill can trace classes.
@@ -356,7 +344,8 @@ public abstract class AbstractDistributedProgramRunner implements ProgramRunner,
                   }
                 })));
               try {
-                twillController = twillPreparer.start();
+                twillController = twillPreparer.start(cConf.getLong(Constants.AppFabric.PROGRAM_MAX_START_SECONDS),
+                                                      TimeUnit.SECONDS);
               } finally {
                 ClassLoaders.setContextClassLoader(oldClassLoader);
               }

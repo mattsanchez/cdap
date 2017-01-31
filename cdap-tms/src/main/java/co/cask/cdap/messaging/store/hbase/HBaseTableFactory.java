@@ -1,5 +1,5 @@
 /*
- * Copyright © 2016 Cask Data, Inc.
+ * Copyright © 2016-2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -16,11 +16,18 @@
 
 package co.cask.cdap.messaging.store.hbase;
 
+import co.cask.cdap.api.common.Bytes;
 import co.cask.cdap.common.conf.CConfiguration;
 import co.cask.cdap.common.conf.Constants;
+import co.cask.cdap.common.utils.ProjectInfo;
 import co.cask.cdap.data2.util.TableId;
+import co.cask.cdap.data2.util.hbase.ColumnFamilyDescriptorBuilder;
+import co.cask.cdap.data2.util.hbase.CoprocessorManager;
+import co.cask.cdap.data2.util.hbase.HBaseDDLExecutorFactory;
 import co.cask.cdap.data2.util.hbase.HBaseTableUtil;
 import co.cask.cdap.data2.util.hbase.HTableDescriptorBuilder;
+import co.cask.cdap.data2.util.hbase.HTableNameConverter;
+import co.cask.cdap.data2.util.hbase.TableDescriptorBuilder;
 import co.cask.cdap.hbase.wd.AbstractRowKeyDistributor;
 import co.cask.cdap.hbase.wd.RowKeyDistributorByHashPrefix;
 import co.cask.cdap.hbase.wd.RowKeyDistributorByHashPrefix.OneByteSimpleHash;
@@ -30,15 +37,20 @@ import co.cask.cdap.messaging.store.MetadataTable;
 import co.cask.cdap.messaging.store.PayloadTable;
 import co.cask.cdap.messaging.store.TableFactory;
 import co.cask.cdap.proto.id.NamespaceId;
-import com.google.common.collect.ImmutableList;
+import co.cask.cdap.spi.hbase.CoprocessorDescriptor;
+import co.cask.cdap.spi.hbase.HBaseDDLExecutor;
 import com.google.inject.Inject;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Coprocessor;
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.TableNotDisabledException;
+import org.apache.hadoop.hbase.TableNotEnabledException;
+import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.twill.common.Threads;
 import org.apache.twill.filesystem.Location;
 import org.apache.twill.filesystem.LocationFactory;
@@ -46,15 +58,23 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nonnull;
 
 /**
  * A {@link TableFactory} for creating messaging tables backed by HBase.
+ * This factory memorize what HBase tables are already exists. If the table get deleted externally,
+ * it relies on the {@link HBaseExceptionHandler} to cleanup the in memory cache so that on the next
+ * request, the table will be recreated and the cache will get repopulated.
+ *
+ * Caching the the table descriptor is ok since all changes of the table descriptor should be done via
+ * the TMS.
  */
 public final class HBaseTableFactory implements TableFactory {
 
@@ -65,7 +85,10 @@ public final class HBaseTableFactory implements TableFactory {
   private final Configuration hConf;
   private final HBaseTableUtil tableUtil;
   private final ExecutorService scanExecutor;
-  private final LocationFactory locationFactory;
+  private final Map<TableId, HTableDescriptor> tableDescriptors;
+  private final CoprocessorManager coprocessorManager;
+  private final HBaseDDLExecutorFactory ddlExecutorFactory;
+  private final boolean manageCoprocessors;
 
   @Inject
   HBaseTableFactory(CConfiguration cConf, Configuration hConf, HBaseTableUtil tableUtil,
@@ -73,7 +96,9 @@ public final class HBaseTableFactory implements TableFactory {
     this.cConf = cConf;
     this.hConf = hConf;
     this.tableUtil = tableUtil;
-    this.locationFactory = locationFactory;
+    this.tableDescriptors = new ConcurrentHashMap<>();
+    this.coprocessorManager = new CoprocessorManager(cConf, locationFactory, tableUtil);
+    this.manageCoprocessors = cConf.getBoolean(Constants.HBase.MANAGE_COPROCESSORS);
 
     RejectedExecutionHandler callerRunsPolicy = new RejectedExecutionHandler() {
       @Override
@@ -93,33 +118,54 @@ public final class HBaseTableFactory implements TableFactory {
                                                60L, TimeUnit.SECONDS, new SynchronousQueue<Runnable>(),
                                                Threads.createDaemonThreadFactory("messaging-hbase-scanner-%d"),
                                                callerRunsPolicy);
+
+    this.ddlExecutorFactory = new HBaseDDLExecutorFactory(cConf, hConf);
   }
 
   @Override
   public MetadataTable createMetadataTable(String tableName) throws IOException {
     TableId tableId = tableUtil.createHTableId(NamespaceId.SYSTEM, tableName);
-    try (HBaseAdmin admin = new HBaseAdmin(hConf)) {
-      HTableDescriptor htd = tableUtil
-        .buildHTableDescriptor(tableId)
-        // Only stores the latest version
-        .addFamily(new HColumnDescriptor(COLUMN_FAMILY).setMaxVersions(1))
-        .build();
-      tableUtil.createTableIfNotExists(admin, tableId, htd);
+    HTable hTable = null;
+
+    // If the table descriptor is in the cache, we assume the table exists.
+    if (!tableDescriptors.containsKey(tableId)) {
+      synchronized (this) {
+        if (!tableDescriptors.containsKey(tableId)) {
+          try (HBaseDDLExecutor ddlExecutor = ddlExecutorFactory.get()) {
+
+            ColumnFamilyDescriptorBuilder cfdBuilder =
+              HBaseTableUtil.getColumnFamilyDescriptorBuilder(Bytes.toString(COLUMN_FAMILY), hConf);
+
+            TableDescriptorBuilder tdBuilder =
+              HBaseTableUtil.getTableDescriptorBuilder(tableId, cConf).addColumnFamily(cfdBuilder.build());
+
+            ddlExecutor.createTableIfNotExists(tdBuilder.build(), null);
+            hTable = tableUtil.createHTable(hConf, tableId);
+            tableDescriptors.put(tableId, hTable.getTableDescriptor());
+          }
+        }
+      }
     }
-    return new HBaseMetadataTable(tableUtil, tableUtil.createHTable(hConf, tableId),
-                                  COLUMN_FAMILY, cConf.getInt(Constants.MessagingSystem.HBASE_SCAN_CACHE_ROWS));
+    if (hTable == null) {
+      hTable = tableUtil.createHTable(hConf, tableId);
+    }
+    return new HBaseMetadataTable(tableUtil, hTable, COLUMN_FAMILY,
+                                  cConf.getInt(Constants.MessagingSystem.HBASE_SCAN_CACHE_ROWS),
+                                  createExceptionHandler(tableId));
   }
 
   @Override
   public MessageTable createMessageTable(String tableName) throws IOException {
     TableId tableId = tableUtil.createHTableId(NamespaceId.SYSTEM, tableName);
     Class<? extends Coprocessor> tableCoprocessor = tableUtil.getMessageTableRegionObserverClassForVersion();
-    HTable hTable = createTableIfNotExists(tableId, cConf.getInt(Constants.MessagingSystem.MESSAGE_TABLE_HBASE_SPLITS),
-                                           tableCoprocessor);
+    HTableWithRowKeyDistributor tableWithRowKeyDistributor = createTable(
+      tableId, cConf.getInt(Constants.MessagingSystem.MESSAGE_TABLE_HBASE_SPLITS), tableCoprocessor
+    );
     return new HBaseMessageTable(
-      tableUtil, hTable, COLUMN_FAMILY,
-      new RowKeyDistributorByHashPrefix(new OneByteSimpleHash(getKeyDistributorBuckets(hTable, tableId))),
-      scanExecutor, cConf.getInt(Constants.MessagingSystem.HBASE_SCAN_CACHE_ROWS)
+      tableUtil, tableWithRowKeyDistributor.getHTable(), COLUMN_FAMILY,
+      tableWithRowKeyDistributor.getRowKeyDistributor(),
+      scanExecutor, cConf.getInt(Constants.MessagingSystem.HBASE_SCAN_CACHE_ROWS),
+      createExceptionHandler(tableId)
     );
   }
 
@@ -127,58 +173,225 @@ public final class HBaseTableFactory implements TableFactory {
   public PayloadTable createPayloadTable(String tableName) throws IOException {
     TableId tableId = tableUtil.createHTableId(NamespaceId.SYSTEM, tableName);
     Class<? extends Coprocessor> tableCoprocessor = tableUtil.getPayloadTableRegionObserverClassForVersion();
-    HTable hTable = createTableIfNotExists(tableId, cConf.getInt(Constants.MessagingSystem.PAYLOAD_TABLE_HBASE_SPLITS),
-                                           tableCoprocessor);
-    return new HBasePayloadTable(
-      tableUtil, hTable, COLUMN_FAMILY,
-      new RowKeyDistributorByHashPrefix(new OneByteSimpleHash(getKeyDistributorBuckets(hTable, tableId))),
-      scanExecutor, cConf.getInt(Constants.MessagingSystem.HBASE_SCAN_CACHE_ROWS)
+    HTableWithRowKeyDistributor tableWithRowKeyDistributor = createTable(
+      tableId, cConf.getInt(Constants.MessagingSystem.PAYLOAD_TABLE_HBASE_SPLITS), tableCoprocessor
     );
+    return new HBasePayloadTable(
+      tableUtil, tableWithRowKeyDistributor.getHTable(), COLUMN_FAMILY,
+      tableWithRowKeyDistributor.getRowKeyDistributor(),
+      scanExecutor, cConf.getInt(Constants.MessagingSystem.HBASE_SCAN_CACHE_ROWS),
+      createExceptionHandler(tableId)
+    );
+  }
+
+  public void upgradeMessageTable(String tableName) throws IOException {
+    upgradeCoProcessor(tableUtil.createHTableId(NamespaceId.SYSTEM, tableName),
+                       tableUtil.getMessageTableRegionObserverClassForVersion());
+  }
+
+  public void upgradePayloadTable(String tableName) throws IOException {
+    upgradeCoProcessor(tableUtil.createHTableId(NamespaceId.SYSTEM, tableName),
+                       tableUtil.getPayloadTableRegionObserverClassForVersion());
+  }
+
+  public void disableMessageTable(String tableName) throws IOException {
+    TableId tableId = tableUtil.createHTableId(NamespaceId.SYSTEM, tableName);
+    try (HBaseDDLExecutor ddlExecutor = ddlExecutorFactory.get()) {
+      disableTable(ddlExecutor, tableId);
+    }
+  }
+
+  public void disablePayloadTable(String tableName) throws IOException {
+    TableId tableId = tableUtil.createHTableId(NamespaceId.SYSTEM, tableName);
+    try (HBaseDDLExecutor ddlExecutor = ddlExecutorFactory.get()) {
+      disableTable(ddlExecutor, tableId);
+    }
+  }
+
+  /**
+   * Creates a {@link HBaseExceptionHandler} that will invalidate the cached table descriptor if
+   * {@link TableNotFoundException} is encountered while performing hbase operation.
+   */
+  private HBaseExceptionHandler createExceptionHandler(final TableId tableId) {
+    return new HBaseExceptionHandler() {
+      @Override
+      public <T extends Exception> T handle(@Nonnull T exception) throws T {
+        if (exception instanceof TableNotFoundException) {
+          tableDescriptors.remove(tableId);
+        } else if (exception instanceof RetriesExhaustedWithDetailsException) {
+          for (Throwable cause : ((RetriesExhaustedWithDetailsException) exception).getCauses()) {
+            if (cause instanceof TableNotFoundException) {
+              tableDescriptors.remove(tableId);
+              break;
+            }
+          }
+        }
+        throw exception;
+      }
+
+      @Override
+      public <T extends Exception> RuntimeException handleAndWrap(T exception) throws RuntimeException {
+        try {
+          throw handle(exception);
+        } catch (Throwable t) {
+          if (t instanceof RuntimeException) {
+            throw (RuntimeException) t;
+          }
+          throw new RuntimeException(t);
+        }
+      }
+    };
+  }
+
+  private void enableTable(HBaseDDLExecutor ddlExecutor, TableId tableId) throws IOException {
+    try {
+      TableName tableName = HTableNameConverter.toTableName(cConf.get(Constants.Dataset.TABLE_PREFIX), tableId);
+      ddlExecutor.enableTableIfDisabled(tableName.getNamespaceAsString(), tableName.getQualifierAsString());
+      LOG.debug("TMS Table {} has been enabled.", tableName);
+    } catch (TableNotFoundException ex) {
+      LOG.debug("TMS Table {} was not found. Skipping enable.", tableId, ex);
+    } catch (TableNotDisabledException ex) {
+      LOG.debug("TMS Table {} was already in enabled state.", tableId, ex);
+    }
+  }
+
+  private void disableTable(HBaseDDLExecutor ddlExecutor, TableId tableId) throws IOException {
+    try {
+      TableName tableName = HTableNameConverter.toTableName(cConf.get(Constants.Dataset.TABLE_PREFIX), tableId);
+      ddlExecutor.disableTableIfEnabled(tableName.getNamespaceAsString(), tableName.getQualifierAsString());
+      LOG.debug("TMS Table {} has been disabled.", tableId);
+    } catch (TableNotFoundException ex) {
+      LOG.debug("TMS Table {} was not found. Skipping disable.", tableId, ex);
+    } catch (TableNotEnabledException ex) {
+      LOG.debug("TMS Table {} was already in disabled state.", tableId, ex);
+    }
+  }
+
+  private void upgradeCoProcessor(TableId tableId, Class<? extends Coprocessor> coprocessor) throws IOException {
+    try (HBaseDDLExecutor ddlExecutor = ddlExecutorFactory.get()) {
+      HTableDescriptor tableDescriptor;
+      try (HBaseAdmin admin = new HBaseAdmin(hConf)) {
+        // If table doesn't exist, then skip upgrading coprocessor
+        if (!tableUtil.tableExists(admin, tableId)) {
+          LOG.debug("TMS Table {} was not found. Skip upgrading coprocessor.", tableId);
+          return;
+        }
+
+        tableDescriptor = tableUtil.getHTableDescriptor(admin, tableId);
+      }
+
+      // Get cdap version from the table
+      ProjectInfo.Version version = HBaseTableUtil.getVersion(tableDescriptor);
+
+      if (version.compareTo(ProjectInfo.getVersion()) >= 0) {
+        // If cdap has version has not changed or is greater, no need to update
+        LOG.info("Table '{}' has not changed and its version '{}' is same or greater than current CDAP version '{}'",
+                 tableId, version, ProjectInfo.getVersion());
+        return;
+      }
+
+      // create a new descriptor for the table update
+      HTableDescriptorBuilder newDescriptor = tableUtil.buildHTableDescriptor(tableDescriptor);
+
+      // Remove old coprocessor
+      Map<String, HBaseTableUtil.CoprocessorInfo> coprocessorInfo = HBaseTableUtil.getCoprocessorInfo(tableDescriptor);
+      for (Map.Entry<String, HBaseTableUtil.CoprocessorInfo> coprocessorEntry : coprocessorInfo.entrySet()) {
+        newDescriptor.removeCoprocessor(coprocessorEntry.getValue().getClassName());
+      }
+
+      // Add new coprocessor
+      addCoprocessor(coprocessor, newDescriptor);
+
+      // Update CDAP version, table prefix
+      HBaseTableUtil.setVersion(newDescriptor);
+      HBaseTableUtil.setTablePrefix(newDescriptor, cConf);
+
+      // Disable Table
+      disableTable(ddlExecutor, tableId);
+
+      tableUtil.modifyTable(ddlExecutor, newDescriptor.build());
+      LOG.debug("Enabling table '{}'...", tableId);
+      enableTable(ddlExecutor, tableId);
+    }
+
+    LOG.info("Table '{}' update completed.", tableId);
   }
 
   /**
    * Creates a new instance of {@link HTable} for the given {@link TableId}. If the hbase table doesn't
    * exist, a new one will be created with the given number of splits.
    */
-  private HTable createTableIfNotExists(TableId tableId, int splits,
-                                        Class<? extends Coprocessor> coprocessor) throws IOException {
-    // Create the table if the table doesn't exist
-    try (HBaseAdmin admin = new HBaseAdmin(hConf)) {
-      // Set the key distributor size the same as the initial number of splits, essentially one bucket per split.
-      AbstractRowKeyDistributor keyDistributor = new RowKeyDistributorByHashPrefix(new OneByteSimpleHash(splits));
+  private HTableWithRowKeyDistributor createTable(TableId tableId, int splits,
+                                                  Class<? extends Coprocessor> coprocessor) throws IOException {
 
-      TableId metadataTableId = tableUtil.createHTableId(NamespaceId.SYSTEM, cConf.get(
-        Constants.MessagingSystem.METADATA_TABLE_NAME));
+    // Lookup the table descriptor from the cache first. If it is there, we assume the HBase table exists
+    // Otherwise, attempt to create it.
+    HTable hTable = null;
+    HTableDescriptor htd = tableDescriptors.get(tableId);
 
-      HTableDescriptorBuilder htdBuilder = tableUtil
-        .buildHTableDescriptor(tableId)
-        // Only stores the latest version
-        .addFamily(new HColumnDescriptor(COLUMN_FAMILY).setMaxVersions(1))
-        // since we use 'OneByteSimpleHash', we set the number of prefix bytes attribute to 1
-        .setValue(Constants.MessagingSystem.HBASE_MESSAGING_TABLE_PREFIX_NUM_BYTES, Integer.toString(1))
-        .setValue(Constants.MessagingSystem.KEY_DISTRIBUTOR_BUCKETS_ATTR, Integer.toString(splits))
-        .setValue(Constants.MessagingSystem.HBASE_METADATA_TABLE_NAMESPACE, metadataTableId.getNamespace());
+    if (htd == null) {
+      synchronized (this) {
+        htd = tableDescriptors.get(tableId);
+        if (htd == null) {
+          boolean tableExists;
+          try (HBaseAdmin admin = new HBaseAdmin(hConf)) {
+            tableExists = tableUtil.tableExists(admin, tableId);
+          }
 
-      addCoprocessor(coprocessor, htdBuilder);
-      HTableDescriptor htd = htdBuilder.build();
-      byte[][] splitKeys = HBaseTableUtil.getSplitKeys(splits, splits, keyDistributor);
-      tableUtil.createTableIfNotExists(admin, tableId, htd, splitKeys);
+          // Create the table if the table doesn't exist
+          try (HBaseDDLExecutor ddlExecutor = ddlExecutorFactory.get()) {
+            // If table exists, then skip creating coprocessor etc
+            if (!tableExists) {
+              TableId metadataTableId = tableUtil.createHTableId(NamespaceId.SYSTEM, cConf.get(
+                Constants.MessagingSystem.METADATA_TABLE_NAME));
+
+              ColumnFamilyDescriptorBuilder cfdBuilder =
+                HBaseTableUtil.getColumnFamilyDescriptorBuilder(Bytes.toString(COLUMN_FAMILY), hConf);
+
+              TableDescriptorBuilder tdBuilder = HBaseTableUtil.getTableDescriptorBuilder(tableId, cConf);
+              tdBuilder.addColumnFamily(cfdBuilder.build())
+                .addProperty(Constants.MessagingSystem.HBASE_MESSAGING_TABLE_PREFIX_NUM_BYTES, Integer.toString(1))
+                .addProperty(Constants.MessagingSystem.KEY_DISTRIBUTOR_BUCKETS_ATTR, Integer.toString(splits))
+                .addProperty(Constants.MessagingSystem.HBASE_METADATA_TABLE_NAMESPACE, metadataTableId.getNamespace())
+                .addCoprocessor(getCoprocessorDescriptor(coprocessor));
+
+              // Set the key distributor size the same as the initial number of splits,
+              // essentially one bucket per split.
+              byte[][] splitKeys = HBaseTableUtil.getSplitKeys(
+                splits, splits, new RowKeyDistributorByHashPrefix(new OneByteSimpleHash(splits)));
+              ddlExecutor.createTableIfNotExists(tdBuilder.build(), splitKeys);
+
+              hTable = tableUtil.createHTable(hConf, tableId);
+              htd = hTable.getTableDescriptor();
+              tableDescriptors.put(tableId, htd);
+            } else {
+              hTable = tableUtil.createHTable(hConf, tableId);
+              htd = hTable.getTableDescriptor();
+              tableDescriptors.put(tableId, htd);
+            }
+          }
+        }
+      }
     }
 
-    HTable hTable = tableUtil.createHTable(hConf, tableId);
+    if (hTable == null) {
+      hTable = tableUtil.createHTable(hConf, tableId);
+    }
     hTable.setAutoFlushTo(false);
-    return hTable;
+    return new HTableWithRowKeyDistributor(
+      hTable, new RowKeyDistributorByHashPrefix(new OneByteSimpleHash(getKeyDistributorBuckets(tableId, htd)))
+    );
   }
 
   /**
    * Returns the value of the key distributor buckets attributed stored in the given HTable.
    */
-  private int getKeyDistributorBuckets(HTable hTable, TableId tableId) throws IOException {
-    // Get the actual key distributor buckets from the table. This can be different than the one in cConf
+  private int getKeyDistributorBuckets(TableId tableId, HTableDescriptor htd) throws IOException {
+    // Get the actual key distributor buckets from the table descriptor. This can be different than the one in cConf
     // if the table was created before changes in the cConf.
     String bucketAttr = Constants.MessagingSystem.KEY_DISTRIBUTOR_BUCKETS_ATTR;
     try {
-      String value = hTable.getTableDescriptor().getValue(bucketAttr);
+      String value = htd.getValue(bucketAttr);
       if (value == null) {
         // Cannot be null
         throw new IOException("Missing table attribute " + bucketAttr + " on HBase table " + tableId);
@@ -191,10 +404,36 @@ public final class HBaseTableFactory implements TableFactory {
 
   private void addCoprocessor(Class<? extends Coprocessor> coprocessor,
                               HTableDescriptorBuilder tableDescriptor) throws IOException {
-    List<? extends Class<? extends Coprocessor>> coprocessors = ImmutableList.of(coprocessor);
-    Location jarDir = locationFactory.create(cConf.get(Constants.MessagingSystem.COPROCESSOR_DIR));
-    Location jarFile = HBaseTableUtil.createCoProcessorJar(coprocessor.getSimpleName(), jarDir, coprocessors);
-    tableDescriptor.addCoprocessor(coprocessor.getName(), new Path(jarFile.toURI().getPath()),
+    Location jarFile = coprocessorManager.ensureCoprocessorExists(CoprocessorManager.Type.MESSAGING);
+    Path path = manageCoprocessors ? new Path(jarFile.toURI().getPath()) : null;
+    tableDescriptor.addCoprocessor(coprocessor.getName(), path,
                                    Coprocessor.PRIORITY_USER, null);
+  }
+
+  private CoprocessorDescriptor getCoprocessorDescriptor(Class<? extends Coprocessor> coprocessor) throws IOException {
+    Location jarFile = coprocessorManager.ensureCoprocessorExists(CoprocessorManager.Type.MESSAGING);
+    String jarPath = manageCoprocessors ? jarFile.toURI().getPath() : null;
+    return new CoprocessorDescriptor(coprocessor.getName(), jarPath, Coprocessor.PRIORITY_USER, null);
+  }
+
+  /**
+   * A holder class for {@link HTable} and a {@link AbstractRowKeyDistributor} for operating on the given table.
+   */
+  private static final class HTableWithRowKeyDistributor {
+    private final HTable hTable;
+    private final AbstractRowKeyDistributor rowKeyDistributor;
+
+    private HTableWithRowKeyDistributor(HTable hTable, AbstractRowKeyDistributor rowKeyDistributor) {
+      this.hTable = hTable;
+      this.rowKeyDistributor = rowKeyDistributor;
+    }
+
+    HTable getHTable() {
+      return hTable;
+    }
+
+    AbstractRowKeyDistributor getRowKeyDistributor() {
+      return rowKeyDistributor;
+    }
   }
 }

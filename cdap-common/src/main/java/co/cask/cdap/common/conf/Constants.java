@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014-2016 Cask Data, Inc.
+ * Copyright © 2014-2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -110,6 +110,7 @@ public final class Constants {
    */
   public static final class HBase {
     public static final String AUTH_KEY_UPDATE_INTERVAL = "hbase.auth.key.update.interval";
+    public static final String MANAGE_COPROCESSORS = "master.manage.hbase.coprocessors";
   }
 
   /**
@@ -512,13 +513,11 @@ public final class Constants {
     public static final String SERVER_ADDRESS = "metrics.query.bind.address";
     public static final String SERVER_PORT = "metrics.query.bind.port";
 
+    public static final String TOPIC_PREFIX = "metrics.topic.prefix";
     public static final String KAFKA_TOPIC_PREFIX = "metrics.kafka.topic.prefix";
     public static final String KAFKA_PARTITION_SIZE = "metrics.kafka.partition.size";
     public static final String KAFKA_CONSUMER_PERSIST_THRESHOLD = "metrics.kafka.consumer.persist.threshold";
     public static final String KAFKA_META_TABLE = "metrics.kafka.meta.table";
-
-    public static final String DEFAULT_KAFKA_META_TABLE = "metrics.kafka.meta";
-    public static final String DEFAULT_KAFKA_TOPIC_PREFIX = "metrics";
 
     // NOTE: "v2" to avoid conflict with data of older metrics system
     public static final String DEFAULT_ENTITY_TABLE_NAME = "metrics.v2.entity";
@@ -527,7 +526,9 @@ public final class Constants {
     public static final long DEFAULT_RETENTION_HOURS = 2;
 
     public static final int DEFAULT_KAFKA_CONSUMER_PERSIST_THRESHOLD = 100;
-    public static final int DEFAULT_KAFKA_PARTITION_SIZE = 1;
+
+    public static final String MESSAGING_TOPIC_NUM = "metrics.messaging.topic.num";
+    public static final String MESSAGING_FETCHER_LIMIT = "metrics.messaging.fetcher.limit";
 
     /**
      * Metric's dataset related constants.
@@ -754,6 +755,9 @@ public final class Constants {
     public static final String SSL_URI_SCHEME = "https://";
     public static final String URI_SCHEME = "http://";
 
+    /** Key to specify the kerberos principal of the entity owner **/
+    public static final String OWNER_PRINCIPAL = "owner.principal";
+
     /**
      * App Fabric
      */
@@ -939,7 +943,6 @@ public final class Constants {
   public static final String CFG_HDFS_LIB_DIR = "hdfs.lib.dir";
 
   public static final String CFG_TWILL_ZK_NAMESPACE = "twill.zookeeper.namespace";
-  public static final String CFG_TWILL_RESERVED_MEMORY_MB = "twill.java.reserved.memory.mb";
   public static final String CFG_TWILL_NO_CONTAINER_TIMEOUT = "twill.no.container.timeout";
 
   /**
@@ -1083,8 +1086,8 @@ public final class Constants {
     public static final String SYSTEM_TOPICS = "messaging.system.topics";
     public static final String TABLE_CACHE_EXPIRATION_SECONDS = "messaging.table.expiration.seconds";
     public static final String TOPIC_DEFAULT_TTL_SECONDS = "messaging.topic.default.ttl.seconds";
-    public static final String COPROCESSOR_METADATA_CACHE_EXPIRATION_SECONDS =
-      "messaging.coprocessor.metadata.cache.expiration.seconds";
+    public static final String COPROCESSOR_METADATA_CACHE_UPDATE_FREQUENCY_SECONDS =
+      "messaging.coprocessor.metadata.cache.update.frequency.seconds";
 
     public static final String HTTP_SERVER_WORKER_THREADS = "messaging.http.server.worker.threads";
     public static final String HTTP_SERVER_EXECUTOR_THREADS = "messaging.http.server.executor.threads";
@@ -1128,5 +1131,38 @@ public final class Constants {
   public static final class OperationalStats {
     public static final String EXTENSIONS_DIR = "operational.stats.extensions.dir";
     public static final String REFRESH_INTERVAL_SECS = "operational.stats.refresh.interval.secs";
+  }
+
+  /**
+   * Constants for Replication
+   */
+  public static final class Replication {
+    public static final String CDAP_SHUTDOWN_TIME_FILENAME = "cdap_shutdown_time";
+  }
+
+  /**
+   * Constants for retry policies.
+   */
+  public static final class Retry {
+    private static final String PREFIX = "retry.policy.";
+    public static final String TYPE = PREFIX + "type";
+    public static final String MAX_TIME_SECS = PREFIX + "max.time.secs";
+    public static final String MAX_RETRIES = PREFIX + "max.retries";
+    public static final String DELAY_BASE_MS = PREFIX + "base.delay.ms";
+    public static final String DELAY_MAX_MS = PREFIX + "max.delay.ms";
+    public static final String MAPREDUCE_PREFIX = "mapreduce.";
+    public static final String SPARK_PREFIX = "spark.";
+    public static final String WORKFLOW_PREFIX = "workflow.";
+    public static final String CUSTOM_ACTION_PREFIX = "custom.action.";
+    public static final String WORKER_PREFIX = "worker.";
+    public static final String SERVICE_PREFIX = "service.";
+    public static final String FLOW_PREFIX = "flow.";
+  }
+
+  /**
+   * Constants for HBase DDL executor
+   */
+  public static final class HBaseDDLExecutor {
+    public static final String EXTENSIONS_DIR = "hbase.ddlexecutor.extension.dir";
   }
 }

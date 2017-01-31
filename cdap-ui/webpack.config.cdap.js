@@ -21,11 +21,16 @@ var LiveReloadPlugin = require('webpack-livereload-plugin');
 var LodashModuleReplacementPlugin = require('lodash-webpack-plugin');
 var autoprefixer = require('autoprefixer');
 var StyleLintPlugin = require('stylelint-webpack-plugin');
-
 var plugins = [
-  new webpack.optimize.CommonsChunkPlugin("common", "common.js", Infinity),
+  new webpack.DllReferencePlugin({
+    context: path.resolve(__dirname, 'dll'),
+    manifest: require(path.join(__dirname, 'dll', '/shared-vendor-manifest.json'))
+  }),
+  new webpack.DllReferencePlugin({
+    context: path.resolve(__dirname, 'dll'),
+    manifest: require(path.join(__dirname, 'dll', '/cdap-vendor-manifest.json'))
+  }),
   new LodashModuleReplacementPlugin,
-  new LiveReloadPlugin(),
   new webpack.optimize.DedupePlugin(),
   new CopyWebpackPlugin([
     {
@@ -52,22 +57,6 @@ var plugins = [
 ];
 var mode = process.env.NODE_ENV;
 
-if (mode === 'production' || mode === 'build') {
-  plugins.push(
-    new webpack.DefinePlugin({
-      'process.env':{
-        'NODE_ENV': JSON.stringify("production"),
-        '__DEVTOOLS__': false
-      },
-    }),
-    new webpack.optimize.UglifyJsPlugin({
-      compress: {
-          warnings: false
-      }
-    })
-  );
-}
-
 var loaders = [
   {
     test: /\.scss$/,
@@ -88,7 +77,11 @@ var loaders = [
       /node_modules/,
       /lib/
     ],
+    include: [
+      path.join(__dirname, 'app')
+    ],
     query: {
+      cacheDirectory: true,
       plugins: ['lodash'],
       presets: ['react', 'es2015']
     }
@@ -103,36 +96,11 @@ var loaders = [
   }
 ];
 
-module.exports = {
+var webpackConfig = {
+  cache: true,
   context: __dirname + '/app/cdap',
   entry: {
-    'cdap': ['./cdap.js'],
-    'common': [
-      'whatwg-fetch',
-      'react',
-      'react-dom',
-      'redux',
-      'lodash',
-      'classnames',
-      'node-uuid',
-      'sockjs-client',
-      'rx',
-      'reactstrap',
-      'react-addons-css-transition-group',
-      'i18n-react',
-      'fuse.js',
-      'react-dropzone',
-      'react-redux',
-      'react-router',
-      'moment',
-      'react-file-download',
-      'mousetrap',
-      'papaparse',
-      'rx-dom',
-      'd3',
-      'chart.js',
-      'cdap-avsc'
-    ]
+    'cdap': ['./cdap.js', 'rx', 'rx-dom']
   },
   module: {
     preLoaders: [
@@ -160,6 +128,9 @@ module.exports = {
     filename: './[name].js',
     path: __dirname + '/cdap_dist/cdap_assets'
   },
+  stats: {
+    chunks: false
+  },
   plugins: plugins,
   resolve: {
     alias: {
@@ -170,3 +141,36 @@ module.exports = {
     }
   }
 };
+if (mode === 'production' || mode === 'build') {
+  plugins.push(
+    new webpack.DefinePlugin({
+      'process.env':{
+        'NODE_ENV': JSON.stringify("production"),
+        '__DEVTOOLS__': false
+      },
+    }),
+    new webpack.optimize.UglifyJsPlugin({
+      compress: {
+        warnings: false
+      }
+    })
+  );
+  webpackConfig = Object.assign({}, webpackConfig, {
+    plugins
+  });
+}
+
+if (mode !== 'production') {
+  webpackConfig = Object.assign({}, webpackConfig, {
+    devtool: 'source-map',
+    plugins:  plugins.concat([
+      new LiveReloadPlugin({
+        port: 35728,
+        appendScriptTag: true
+      })
+    ])
+  });
+}
+
+
+module.exports = webpackConfig;

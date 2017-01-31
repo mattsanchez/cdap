@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014-2016 Cask Data, Inc.
+ * Copyright © 2014-2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -45,6 +45,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.security.PrivilegedExceptionAction;
@@ -338,6 +339,35 @@ public final class Locations {
       resolvedParent = URI.create(parent.substring(0, parent.length() - 1));
     }
     return location.getLocationFactory().create(resolvedParent);
+  }
+
+  /**
+   * Returns the relative path for a given locationURI.
+   * If locationURI was created with a different locationFactory the same locationURI may be returned.
+   * @param locationFactory locationFactory to be used to create base URI
+   * @param locationURI URI to be used for base URI
+   * @return Path relative to the Base path of the given locationFactory
+   */
+  public static String getRelativePath(LocationFactory locationFactory, URI locationURI) {
+    URI baseURI = URI.create(locationFactory.create("").toURI().getPath());
+    URI relativeURI = baseURI.relativize(URI.create(locationURI.getPath()));
+    return relativeURI.getPath();
+  }
+
+  /**
+   * For backward compatibility with URIs, this method creates a location based on uri or path
+   * one of them should be non-null
+   * @param locationFactory corresponding to the uri and path
+   * @param path if path is available
+   * @param uri if uri is available
+   * @return Backward compatible Location
+   */
+  public static Location getCompatibleLocation(LocationFactory locationFactory,
+                                               @Nullable String path, @Nullable URI uri) {
+    Location artifactLocation = uri != null
+      ? locationFactory.create(Locations.getRelativePath(locationFactory, uri))
+      : locationFactory.create(path);
+    return artifactLocation;
   }
 
   /**

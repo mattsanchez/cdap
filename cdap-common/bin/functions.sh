@@ -461,24 +461,22 @@ cdap_set_hive_classpath() {
 
 #
 # cdap_set_spark
-# Attempts to find SPARK_HOME
+# Attempts to find SPARK_HOME and setup Spark specifics env by running $SPARK_HOME/conf/spark-env.sh
 #
 cdap_set_spark() {
   local readonly __saved_stty=$(stty -g 2>/dev/null)
-  # First, see if we're set to something sane
-  if [[ -n ${SPARK_HOME} ]] && [[ -d ${SPARK_HOME} ]]; then
-    export SPARK_HOME
-    return 0 # SPARK_HOME is set, already
-  elif cdap_check_mapr; then
-    # MapR installs spark to a known location
-    SPARK_HOME=$(ls -d /opt/mapr/spark/spark-* 2>/dev/null)
-    if [[ -n ${SPARK_HOME} ]] && [[ -d ${SPARK_HOME} ]]; then
-      export SPARK_HOME
-      return 0
-    fi
-    return 1
-  else
-    if [[ $(which spark-shell 2>/dev/null) ]]; then
+  # If SPARK_HOME is either not set or is not directory, tries to auto-detect it
+  if [[ -z ${SPARK_HOME} ]] || [[ ! -d ${SPARK_HOME} ]]; then
+    if cdap_check_mapr; then
+      # MapR installs spark to a known location
+      SPARK_HOME=$(ls -d /opt/mapr/spark/spark-* 2>/dev/null)
+      if [[ -z ${SPARK_HOME} ]] || [[ ! -d ${SPARK_HOME} ]]; then
+        return 1
+      fi
+    elif [[ $(which spark-shell 2>/dev/null) ]]; then
+      # If there is no valid SPARK_HOME, we should unset the existing one if it is set
+      # Otherwise the spark-shell won't run correctly
+      unset SPARK_HOME
       ERR_FILE=$(mktemp)
       SPARK_VAR_OUT=$(echo 'for ((key, value) <- sys.env) println (key + "=" + value); exit' | spark-shell --master local 2>${ERR_FILE})
       __ret=$?
@@ -493,11 +491,43 @@ cdap_set_spark() {
         return 1
       fi
       SPARK_HOME=$(echo -e "${SPARK_VAR_OUT}" | grep ^SPARK_HOME= | cut -d= -f2)
-      export SPARK_HOME
-      return 0
     fi
+  fi
+
+  export SPARK_HOME
+
+  # Find environment variables setup via spark-env.sh
+  cdap_load_spark_env || logecho "[WARN] Fail to source spark-env.sh to setup environment variables for Spark"
+  return 0
+}
+
+cdap_load_spark_env() {
+  # The same logic as used by Spark to find spark-env.sh
+  # When this method is called, SPARK_HOME should already been set,
+  # as this method should only be called from cdap_set_spark()
+  if [[ -z ${SPARK_HOME} ]]; then
     return 1
   fi
+
+  CONF_DIR="${SPARK_CONF_DIR:-"$SPARK_HOME"/conf}"
+  if [[ -f "${CONF_DIR}/spark-env.sh" ]]; then
+    if [[ -z ${SPARK_ENV_PATTERN} ]]; then
+      # By default, only get env from spark-env.sh that starts with PY or SPARK
+      SPARK_ENV_PATTERN="^(PY|SPARK)"
+    fi
+    SPARK_ENV=$(source ${CONF_DIR}/spark-env.sh; env | grep -E "${SPARK_ENV_PATTERN}")
+    __ret=$?
+    if [[ ${__ret} -ne 0 ]]; then
+      return 1
+    fi
+
+    while read -r line; do
+      # Prefix the env variable with _SPARK_ to avoid conflicts
+      export "_SPARK_${line%%=*}"="${line#*=}"
+    done <<< "${SPARK_ENV}"
+  fi
+
+  return 0
 }
 
 #
@@ -613,6 +643,11 @@ cdap_start_java() {
       __defines+=" -Djava.library.path=${JAVA_LIBRARY_PATH}"
     fi
     __startup_checks=${CDAP_STARTUP_CHECKS:-$(cdap_get_conf "master.startup.checks.enabled" "${CDAP_CONF}"/cdap-site.xml true)}
+
+    # Build and upload coprocessor jars
+    logecho "$(date) Ensuring required HBase coprocessors are on HDFS"
+    cdap_setup_coprocessors </dev/null >>${__logfile} 2>&1 || die "Could not setup coprocessors. Please check ${__logfile} for more information."
+
     if [[ ${__startup_checks} == true ]]; then
       logecho "$(date) Running CDAP Master startup checks -- this may take a few minutes"
       "${JAVA}" ${JAVA_HEAPMAX} ${__explore} ${OPTS} -cp ${CLASSPATH} co.cask.cdap.master.startup.MasterStartupTool </dev/null >>${__logfile} 2>&1
@@ -801,12 +836,12 @@ cdap_sdk_start() {
 
   eval split_jvm_opts ${CDAP_SDK_DEFAULT_JVM_OPTS} ${CDAP_SDK_OPTS} ${JAVA_OPTS}
   if [[ -f ${__pidfile} ]]; then
-    local readonly __pid=$(<${__pidfile})
+    __pid=$(<${__pidfile})
     if kill -0 ${__pid} >/dev/null 2>&1; then
-      echo "Standalone process with process id ${__pid} is already running." 
+      echo "Standalone process with process id ${__pid} is already running."
       return 0
     fi
-  fi 
+  fi
 
   cdap_create_local_dir || die "Failed to create LOCAL_DIR: ${LOCAL_DIR}"
   cdap_create_log_dir || die "Failed to create LOG_DIR: ${LOG_DIR}"
@@ -985,7 +1020,7 @@ cdap_cli() {
   elif [[ -d ${__path}/conf ]]; then
     CLASSPATH=${CLASSPATH}:"${__path}"/conf/
   fi
-  "${JAVA}" ${JAVA_OPTS} -cp ${CLASSPATH} -Dscript=${__script} ${__class} ${@}
+  "${JAVA}" ${JAVA_OPTS} -cp ${CLASSPATH} -Dscript=${__script} ${__class} "${@}"
 }
 
 #
@@ -1043,6 +1078,34 @@ cdap_upgrade_tool() {
   else
     set -- "upgrade" ${@}
   fi
+
+  cdap_run_class ${__class} ${@}
+  __ret=${?}
+  return ${__ret}
+}
+
+#
+# cdap_setup [component] [arguments]
+#
+cdap_setup() {
+  local __component=${1}
+  shift
+
+  # currently, only ever need to setup coprocessors
+  # in the future, we might want to add more commands, like 'smoketest'
+  if [[ ${__component} != 'coprocessors' ]]; then
+    die "Setup component must be 'coprocessors'"
+  fi
+
+  cdap_setup_${__component} ${@}
+  return $?
+}
+
+#
+# cdap_setup_coprocessors [arguments]
+#
+cdap_setup_coprocessors() {
+  local readonly __ret __class=co.cask.cdap.data.tools.CoprocessorBuildTool
 
   cdap_run_class ${__class} ${@}
   __ret=${?}

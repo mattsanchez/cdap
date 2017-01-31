@@ -69,11 +69,12 @@ test -f "${CDAP_CONF}"/cdap-env.sh && source "${CDAP_CONF}"/cdap-env.sh
 case ${1} in
   auth-server|kafka-server|master|router|ui) CDAP_SERVICE=${1}; shift; cdap_service ${CDAP_SERVICE} ${@}; __ret=${?} ;;
   classpath) cdap_service master classpath; __ret=${?} ;;
-  cli) shift; cdap_cli ${@}; __ret=${?} ;;
+  cli) shift; cdap_cli "${@}"; __ret=${?} ;;
   config-tool) shift; cdap_config_tool ${@}; __ret=${?} ;;
   upgrade) shift; cdap_upgrade_tool ${@}; __ret=${?} ;;
   run) shift; cdap_run_class ${@}; __ret=${?} ;;
   sdk) shift; cdap_sdk ${@}; __ret=${?} ;;
+  setup) shift; cdap_setup ${@}; __ret=${?} ;;
   debug) shift; cdap_debug ${@}; __ret=${?} ;;
   *)
     echo
@@ -92,6 +93,8 @@ case ${1} in
     echo "    classpath    - Returns the Java CLASSPATH of the CDAP Master service"
     echo "    run          - Runs a given class with arguments using the CDAP Master CLASSPATH and environment"
     echo "    upgrade      - Runs the CDAP Upgrade with optional arguments"
+    echo
+    echo "    setup        - Setup the specified component (coprocessors) required by CDAP at runtime"
     echo
     else
     echo "    sdk          - Sends the arguments (start/stop/etc.) to the Standalone CDAP service on this host"

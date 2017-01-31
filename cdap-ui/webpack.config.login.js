@@ -16,8 +16,12 @@
 var webpack = require('webpack');
 var CopyWebpackPlugin = require('copy-webpack-plugin');
 var StyleLintPlugin = require('stylelint-webpack-plugin');
+var path = require('path');
 var plugins = [
-  new webpack.optimize.CommonsChunkPlugin("common", "common.js", Infinity),
+  new webpack.DllReferencePlugin({
+    context: path.resolve(__dirname, 'dll'),
+    manifest: require(path.join(__dirname, 'dll', '/shared-vendor-manifest.json'))
+  }),
   new webpack.optimize.DedupePlugin(),
   new CopyWebpackPlugin([
     {
@@ -39,21 +43,6 @@ var plugins = [
   })
 ];
 var mode = process.env.NODE_ENV;
-if (mode === 'production' || mode === 'build') {
-  plugins.push(
-    new webpack.DefinePlugin({
-      'process.env':{
-        'NODE_ENV': JSON.stringify("production"),
-        '__DEVTOOLS__': false
-      },
-    }),
-    new webpack.optimize.UglifyJsPlugin({
-      compress: {
-          warnings: false
-      }
-    })
-  );
-}
 var loaders = [
   {
     test: /\.scss$/,
@@ -84,12 +73,10 @@ var loaders = [
     loader: 'file-loader'
   }
 ];
-
-module.exports = {
+var webpackConfig = {
   context: __dirname + '/app/login',
   entry: {
-    'login': ['./login.js'],
-    'common': ['react', 'react-dom']
+    'login': ['./login.js']
   },
   module: {
     preLoaders: [
@@ -108,9 +95,39 @@ module.exports = {
     ],
     loaders: loaders
   },
+  stats: {
+    chunks: false
+  },
   output: {
     filename: './[name].js',
     path: __dirname + '/login_dist/login_assets'
   },
   plugins: plugins
 };
+
+if (mode === 'production') {
+  plugins.push(
+    new webpack.DefinePlugin({
+      'process.env':{
+        'NODE_ENV': JSON.stringify("production"),
+        '__DEVTOOLS__': false
+      },
+    }),
+    new webpack.optimize.UglifyJsPlugin({
+      compress: {
+          warnings: false
+      }
+    })
+  );
+  webpackConfig = Object.assign({}, webpackConfig, {
+    plugins
+  });
+}
+
+if (mode !== 'production') {
+  webpackConfig = Object.assign({}, webpackConfig, {
+    devtool: 'source-map'
+  });
+}
+
+module.exports = webpackConfig;

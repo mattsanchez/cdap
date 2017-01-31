@@ -24,21 +24,16 @@ import co.cask.cdap.common.namespace.NamespaceQueryAdmin;
 import co.cask.cdap.common.utils.ProjectInfo;
 import co.cask.cdap.data2.util.TableId;
 import co.cask.cdap.hbase.wd.AbstractRowKeyDistributor;
-import co.cask.cdap.proto.Id;
 import co.cask.cdap.proto.NamespaceMeta;
 import co.cask.cdap.proto.id.NamespaceId;
+import co.cask.cdap.spi.hbase.ColumnFamilyDescriptor;
+import co.cask.cdap.spi.hbase.HBaseDDLExecutor;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicate;
 import com.google.common.base.Predicates;
-import com.google.common.base.Stopwatch;
 import com.google.common.base.Strings;
-import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
-import com.google.common.hash.Hasher;
-import com.google.common.hash.Hashing;
-import com.google.common.io.Files;
-import com.google.common.io.OutputSupplier;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.ClusterStatus;
@@ -49,7 +44,6 @@ import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.RegionLoad;
 import org.apache.hadoop.hbase.ServerName;
-import org.apache.hadoop.hbase.TableExistsException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
@@ -58,24 +52,13 @@ import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.twill.api.ClassAcceptor;
-import org.apache.twill.filesystem.Location;
-import org.apache.twill.internal.utils.Dependencies;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.URL;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
-import java.util.jar.JarEntry;
-import java.util.jar.JarOutputStream;
 import java.util.regex.Matcher;
 import javax.annotation.Nullable;
 
@@ -101,22 +84,25 @@ public abstract class HBaseTableUtil {
   }
 
   private static final Logger LOG = LoggerFactory.getLogger(HBaseTableUtil.class);
-
-  public static final long MAX_CREATE_TABLE_WAIT = 5000L;    // Maximum wait of 5 seconds for table creation.
-
   // 4Mb
   public static final int DEFAULT_WRITE_BUFFER_SIZE = 4 * 1024 * 1024;
 
   private static final int COPY_BUFFER_SIZE = 0x1000;    // 4K
-  private static final CompressionType DEFAULT_COMPRESSION_TYPE = CompressionType.SNAPPY;
+  public static final CompressionType DEFAULT_COMPRESSION_TYPE = CompressionType.SNAPPY;
+
+  /**
+   * This property is ONLY used in test cases.
+   */
   public static final String CFG_HBASE_TABLE_COMPRESSION = "hbase.table.compression.default";
 
 
   protected String tablePrefix;
+  protected CConfiguration cConf;
   protected NamespaceQueryAdmin namespaceQueryAdmin;
 
   public void setCConf(CConfiguration cConf) {
     this.tablePrefix = getTablePrefix(cConf);
+    this.cConf = cConf;
   }
 
   public void setNamespaceQueryAdmin(NamespaceQueryAdmin namespaceQueryAdmin) {
@@ -200,92 +186,6 @@ public abstract class HBaseTableUtil {
       !Strings.isNullOrEmpty(value);
   }
 
-  /**
-   * Create a hbase table if it does not exist. Deals with race conditions when two clients concurrently attempt to
-   * create the table.
-   * @param admin the hbase admin
-   * @param tableId the {@link TableId} for the table to create
-   * @param tableDescriptor hbase table descriptor for the new table
-   */
-  public void createTableIfNotExists(HBaseAdmin admin, TableId tableId,
-                                     HTableDescriptor tableDescriptor) throws IOException {
-    createTableIfNotExists(admin, tableId, tableDescriptor, null);
-  }
-
-  /**
-   * Creates a hbase table if it does not exists. Same as calling
-   * {@link #createTableIfNotExists(HBaseAdmin, TableId, HTableDescriptor, byte[][], long, TimeUnit)}
-   * with timeout = {@link #MAX_CREATE_TABLE_WAIT} milliseconds.
-   */
-  public void createTableIfNotExists(HBaseAdmin admin, TableId tableId,
-                                     HTableDescriptor tableDescriptor,
-                                     @Nullable byte[][] splitKeys) throws IOException {
-    createTableIfNotExists(admin, tableId, tableDescriptor, splitKeys,
-                           MAX_CREATE_TABLE_WAIT, TimeUnit.MILLISECONDS);
-  }
-
-  /**
-   * Create a hbase table if it does not exist. Deals with race conditions when two clients concurrently attempt to
-   * create the table.
-   * @param admin the hbase admin
-   * @param tableId {@link TableId} representing the table
-   * @param tableDescriptor hbase table descriptor for the new table
-   * @param timeout Maximum time to wait for table creation.
-   * @param timeoutUnit The TimeUnit for timeout.
-   */
-  public void createTableIfNotExists(HBaseAdmin admin, TableId tableId, HTableDescriptor tableDescriptor,
-                                     @Nullable byte[][] splitKeys,
-                                     long timeout, TimeUnit timeoutUnit) throws IOException {
-    if (tableExists(admin, tableId)) {
-      return;
-    }
-    setDefaultConfiguration(tableDescriptor, admin.getConfiguration());
-    tableDescriptor = setVersion(tableDescriptor);
-    tableDescriptor = setTablePrefix(tableDescriptor);
-    try {
-      LOG.debug("Attempting to create table '{}' if it does not exist", tableId);
-      // HBaseAdmin.createTable can handle null splitKeys.
-      admin.createTable(tableDescriptor, splitKeys);
-      LOG.info("Table created '{}'", tableId);
-      return;
-    } catch (TableExistsException e) {
-      // table may exist because someone else is creating it at the same
-      // time. But it may not be available yet, and opening it might fail.
-      LOG.debug("Table '{}' already exists.", tableId, e);
-    }
-
-    // Wait for table to materialize
-    try {
-      Stopwatch stopwatch = new Stopwatch();
-      stopwatch.start();
-      long sleepTime = timeoutUnit.toNanos(timeout) / 10;
-      sleepTime = sleepTime <= 0 ? 1 : sleepTime;
-      do {
-        if (tableExists(admin, tableId)) {
-          LOG.info("Table '{}' exists now. Assuming that another process concurrently created it.", tableId);
-          return;
-        } else {
-          TimeUnit.NANOSECONDS.sleep(sleepTime);
-        }
-      } while (stopwatch.elapsedTime(timeoutUnit) < timeout);
-    } catch (InterruptedException e) {
-      LOG.warn("Sleeping thread interrupted.");
-    }
-    LOG.error("Table '{}' does not exist after waiting {} ms. Giving up.", tableId, MAX_CREATE_TABLE_WAIT);
-  }
-
-  // This is a workaround for unit-tests which should run even if compression is not supported
-  // todo: this should be addressed on a general level: CDAP may use HBase cluster (or multiple at a time some of)
-  //       which doesn't support certain compression type
-  private void setDefaultConfiguration(HTableDescriptor tableDescriptor, Configuration conf) {
-    String compression = conf.get(CFG_HBASE_TABLE_COMPRESSION, DEFAULT_COMPRESSION_TYPE.name());
-    CompressionType compressionAlgo = CompressionType.valueOf(compression);
-    for (HColumnDescriptor hcd : tableDescriptor.getColumnFamilies()) {
-      setCompression(hcd, compressionAlgo);
-      setBloomFilter(hcd, BloomType.ROW);
-    }
-  }
-
   public HTableDescriptor setVersion(HTableDescriptor tableDescriptor) {
     HTableDescriptorBuilder builder = buildHTableDescriptor(tableDescriptor);
     setVersion(builder);
@@ -296,6 +196,43 @@ public abstract class HBaseTableUtil {
     HTableDescriptorBuilder builder = buildHTableDescriptor(tableDescriptor);
     builder.setValue(Constants.Dataset.TABLE_PREFIX, tablePrefix);
     return builder.build();
+  }
+
+  /**
+   * Get {@link ColumnFamilyDescriptorBuilder} with default properties set.
+   * @param columnFamilyName name of the column family
+   * @param hConf hadoop configurations
+   * @return the builder with default properties set
+   */
+  public static ColumnFamilyDescriptorBuilder getColumnFamilyDescriptorBuilder(String columnFamilyName,
+                                                                               Configuration hConf) {
+    ColumnFamilyDescriptorBuilder cfdBuilder = new ColumnFamilyDescriptorBuilder(columnFamilyName);
+    String compression = hConf.get(HBaseTableUtil.CFG_HBASE_TABLE_COMPRESSION,
+                                   HBaseTableUtil.DEFAULT_COMPRESSION_TYPE.name());
+    cfdBuilder
+      .setMaxVersions(1)
+      .setBloomType(ColumnFamilyDescriptor.BloomType.ROW)
+      .setCompressionType(ColumnFamilyDescriptor.CompressionType.valueOf(compression.toUpperCase()));
+
+    return cfdBuilder;
+  }
+
+  /**
+   * Get {@link TableDescriptorBuilder} with default properties set.
+   * @param tableId id of the table for which the descriptor is to be returned
+   * @param cConf the instance of the {@link CConfiguration}
+   * @return the builder with default properties set
+   */
+  public static TableDescriptorBuilder getTableDescriptorBuilder(TableId tableId, CConfiguration cConf) {
+    String tablePrefix = cConf.get(Constants.Dataset.TABLE_PREFIX);
+    TableName tableName = HTableNameConverter.toTableName(tablePrefix, tableId);
+    TableDescriptorBuilder tdBuilder = new TableDescriptorBuilder(tableName.getNamespaceAsString(),
+                                                                  tableName.getQualifierAsString());
+    tdBuilder
+      .addProperty(Constants.Dataset.TABLE_PREFIX, tablePrefix)
+      .addProperty(HBaseTableUtil.CDAP_VERSION, ProjectInfo.getVersion().toString());
+
+    return tdBuilder;
   }
 
   // For simplicity we allow max 255 splits per bucket for now
@@ -357,94 +294,6 @@ public abstract class HBaseTableUtil {
 
     return splitKeys;
   }
-
-  public static Location createCoProcessorJar(String filePrefix, Location jarDir,
-                                              Iterable<? extends Class<? extends Coprocessor>> classes)
-                                              throws IOException {
-    StringBuilder buf = new StringBuilder();
-    for (Class<? extends Coprocessor> c : classes) {
-      buf.append(c.getName()).append(", ");
-    }
-    if (buf.length() == 0) {
-      return null;
-    }
-
-    LOG.debug("Creating jar file for coprocessor classes: " + buf.toString());
-    final Hasher hasher = Hashing.md5().newHasher();
-    final byte[] buffer = new byte[COPY_BUFFER_SIZE];
-
-    final Map<String, URL> dependentClasses = new HashMap<>();
-    for (Class<? extends Coprocessor> clz : classes) {
-      Dependencies.findClassDependencies(clz.getClassLoader(), new ClassAcceptor() {
-        @Override
-        public boolean accept(String className, final URL classUrl, URL classPathUrl) {
-          // Assuming the endpoint and protocol class doesn't have dependencies
-          // other than those comes with HBase, Java and fastutil.
-          if (className.startsWith("co.cask") || className.startsWith("it.unimi.dsi.fastutil")
-            || className.startsWith("org.apache.tephra") || className.startsWith("com.google.gson")) {
-            if (!dependentClasses.containsKey(className)) {
-              dependentClasses.put(className, classUrl);
-            }
-            return true;
-          }
-          return false;
-        }
-      }, clz.getName());
-    }
-
-    if (!dependentClasses.isEmpty()) {
-      LOG.debug("Adding " + dependentClasses.size() + " classes to jar");
-      File jarFile = File.createTempFile(filePrefix, ".jar");
-      try {
-        try (JarOutputStream jarOutput = new JarOutputStream(new FileOutputStream(jarFile))) {
-          for (Map.Entry<String, URL> entry : dependentClasses.entrySet()) {
-            try {
-              jarOutput.putNextEntry(new JarEntry(entry.getKey().replace('.', File.separatorChar) + ".class"));
-
-              try (InputStream inputStream = entry.getValue().openStream()) {
-                int len = inputStream.read(buffer);
-                while (len >= 0) {
-                  hasher.putBytes(buffer, 0, len);
-                  jarOutput.write(buffer, 0, len);
-                  len = inputStream.read(buffer);
-                }
-              }
-            } catch (IOException e) {
-              LOG.info("Error writing to jar", e);
-              throw Throwables.propagate(e);
-            }
-          }
-        }
-
-        // Copy jar file into HDFS
-        // Target path is the jarDir + jarMD5.jar
-        final Location targetPath = jarDir.append("coprocessor-" + ProjectInfo.getVersion()
-                                                    + "-" + hasher.hash().toString() + ".jar");
-
-        // If the file exists and having same since, assume the file doesn't changed
-        if (targetPath.exists() && targetPath.length() == jarFile.length()) {
-          return targetPath;
-        }
-
-        // Copy jar file into filesystem
-        if (!jarDir.mkdirs() && !jarDir.exists()) {
-          throw new IOException("Fails to create directory: " + jarDir);
-        }
-        Files.copy(jarFile, new OutputSupplier<OutputStream>() {
-          @Override
-          public OutputStream getOutput() throws IOException {
-            return targetPath.getOutputStream();
-          }
-        });
-        return targetPath;
-      } finally {
-        jarFile.delete();
-      }
-    }
-    // no dependent classes to add
-    return null;
-  }
-
 
   /**
    * Returns information for all coprocessor configured for the table.
@@ -543,44 +392,6 @@ public abstract class HBaseTableUtil {
   public abstract boolean hasNamespace(HBaseAdmin admin, String namespace) throws IOException;
 
   /**
-   * Creates an HBase namespace, if it does not already exist
-   * This method uses {@link Id.Namespace} here to cover for a future case when CDAP namespaces may push down namespace
-   * properties to HBase
-   *
-   * @param admin the {@link HBaseAdmin} to use to communicate with HBase
-   * @param namespace the namespace to create
-   * @throws IOException if an I/O error occurs during the operation
-   */
-  public abstract void createNamespaceIfNotExists(HBaseAdmin admin, String namespace) throws IOException;
-
-  /**
-   * Creates an HBase namespace, if it exists
-   *
-   * @param admin the {@link HBaseAdmin} to use to communicate with HBase
-   * @param namespace the namespace to delete
-   * @throws IOException if an I/O error occurs during the operation
-   */
-  public abstract void  deleteNamespaceIfExists(HBaseAdmin admin, String namespace) throws IOException;
-
-  /**
-   * Disable an HBase table
-   *
-   * @param admin the {@link HBaseAdmin} to use to communicate with HBase
-   * @param tableId {@link TableId} for the specified table
-   * @throws IOException
-   */
-  public abstract void disableTable(HBaseAdmin admin, TableId tableId) throws IOException;
-
-  /**
-   * Enable an HBase table
-   *
-   * @param admin the {@link HBaseAdmin} to use to communicate with HBase
-   * @param tableId {@link TableId} for the specified table
-   * @throws IOException
-   */
-  public abstract void enableTable(HBaseAdmin admin, TableId tableId) throws IOException;
-
-  /**
    * Check if an HBase table exists
    *
    * @param admin the {@link HBaseAdmin} to use to communicate with HBase
@@ -592,20 +403,20 @@ public abstract class HBaseTableUtil {
   /**
    * Delete an HBase table
    *
-   * @param admin the {@link HBaseAdmin} to use to communicate with HBase
+   * @param ddlExecutor the {@link HBaseDDLExecutor} to use to communicate with HBase
    * @param tableId {@link TableId} for the specified table
    * @throws IOException
    */
-  public abstract void deleteTable(HBaseAdmin admin, TableId tableId) throws IOException;
+  public abstract void deleteTable(HBaseDDLExecutor ddlExecutor, TableId tableId) throws IOException;
 
   /**
    * Modify an HBase table
    *
-   * @param admin the {@link HBaseAdmin} to use to communicate with HBase
+   * @param ddlExecutor the {@link HBaseDDLExecutor} to use to communicate with HBase
    * @param tableDescriptor the modified {@link HTableDescriptor}
    * @throws IOException
    */
-  public abstract void modifyTable(HBaseAdmin admin, HTableDescriptor tableDescriptor) throws IOException;
+  public abstract void modifyTable(HBaseDDLExecutor ddlExecutor, HTableDescriptor tableDescriptor) throws IOException;
 
   /**
    * Returns a list of {@link HRegionInfo} for the specified {@link TableId}
@@ -620,16 +431,19 @@ public abstract class HBaseTableUtil {
   /**
    * Deletes all tables in the specified namespace that satisfy the given {@link Predicate}.
    *
-   * @param admin the {@link HBaseAdmin} to use to communicate with HBase
+   * @param ddlExecutor the {@link HBaseAdmin} to use to communicate with HBase
    * @param namespaceId namespace for which the tables are being deleted
+   * @param hConf The {@link Configuration} instance
    * @param predicate The {@link Predicate} to decide whether to drop a table or not
    * @throws IOException
    */
-  public void deleteAllInNamespace(HBaseAdmin admin, String namespaceId,
-                                   Predicate<TableId> predicate) throws IOException {
-    for (TableId tableId : listTablesInNamespace(admin, namespaceId)) {
-      if (predicate.apply(tableId)) {
-        dropTable(admin, tableId);
+  public void deleteAllInNamespace(HBaseDDLExecutor ddlExecutor, String namespaceId,
+                                   Configuration hConf, Predicate<TableId> predicate) throws IOException {
+    try (HBaseAdmin admin = new HBaseAdmin(hConf)) {
+      for (TableId tableId : listTablesInNamespace(admin, namespaceId)) {
+        if (predicate.apply(tableId)) {
+          dropTable(ddlExecutor, tableId);
+        }
       }
     }
   }
@@ -637,12 +451,14 @@ public abstract class HBaseTableUtil {
   /**
    * Deletes all tables in the specified namespace
    *
-   * @param admin the {@link HBaseAdmin} to use to communicate with HBase
+   * @param ddlExecutor the {@link HBaseDDLExecutor} to use to communicate with HBase
    * @param namespaceId namespace for which the tables are being deleted
+   * @param hConf The {@link Configuration} instance
    * @throws IOException
    */
-  public void deleteAllInNamespace(HBaseAdmin admin, String namespaceId) throws IOException {
-    deleteAllInNamespace(admin, namespaceId, Predicates.<TableId>alwaysTrue());
+  public void deleteAllInNamespace(HBaseDDLExecutor ddlExecutor, String namespaceId, Configuration hConf)
+    throws IOException {
+    deleteAllInNamespace(ddlExecutor, namespaceId, hConf, Predicates.<TableId>alwaysTrue());
   }
 
   /**
@@ -661,25 +477,25 @@ public abstract class HBaseTableUtil {
 
   /**
    * Disables and deletes a table.
-   * @param admin the {@link HBaseAdmin} to use to communicate with HBase
+   * @param ddlExecutor the {@link HBaseDDLExecutor} to use to communicate with HBase
    * @param tableId  {@link TableId} for the specified table
    * @throws IOException
    */
-  public void dropTable(HBaseAdmin admin, TableId tableId) throws IOException {
-    disableTable(admin, tableId);
-    deleteTable(admin, tableId);
+  public void dropTable(HBaseDDLExecutor ddlExecutor, TableId tableId) throws IOException {
+    TableName tableName = HTableNameConverter.toTableName(getTablePrefix(cConf), tableId);
+    ddlExecutor.disableTableIfEnabled(tableName.getNamespaceAsString(), tableName.getQualifierAsString());
+    deleteTable(ddlExecutor, tableId);
   }
 
   /**
    * Truncates a table
-   * @param admin the {@link HBaseAdmin} to use to communicate with HBase
+   * @param ddlExecutor the {@link HBaseDDLExecutor} to use to communicate with HBase
    * @param tableId  {@link TableId} for the specified table
    * @throws IOException
    */
-  public void truncateTable(HBaseAdmin admin, TableId tableId) throws IOException {
-    HTableDescriptor tableDescriptor = getHTableDescriptor(admin, tableId);
-    dropTable(admin, tableId);
-    createTableIfNotExists(admin, tableId, tableDescriptor);
+  public void truncateTable(HBaseDDLExecutor ddlExecutor, TableId tableId) throws IOException {
+    TableName tableName = HTableNameConverter.toTableName(getTablePrefix(cConf), tableId);
+    ddlExecutor.truncateTable(tableName.getNamespaceAsString(), tableName.getQualifierAsString());
   }
 
   /**
@@ -760,8 +576,6 @@ public abstract class HBaseTableUtil {
   public abstract Class<? extends Coprocessor> getMessageTableRegionObserverClassForVersion();
   public abstract Class<? extends Coprocessor> getPayloadTableRegionObserverClassForVersion();
 
-  protected abstract HTableNameConverter getHTableNameConverter();
-
   /**
    * Collects HBase table stats
    * //TODO: Explore the possiblitity of returning a {@code Map<TableId, TableStats>}
@@ -775,7 +589,6 @@ public abstract class HBaseTableUtil {
     Map<TableId, TableStats> datasetStat = Maps.newHashMap();
     ClusterStatus clusterStatus = admin.getClusterStatus();
 
-    HTableNameConverter hTableNameConverter = getHTableNameConverter();
     for (ServerName serverName : clusterStatus.getServers()) {
       Map<byte[], RegionLoad> regionsLoad = clusterStatus.getLoad(serverName).getRegionsLoad();
 
@@ -785,7 +598,7 @@ public abstract class HBaseTableUtil {
         if (!isCDAPTable(tableDescriptor)) {
           continue;
         }
-        TableId tableId = hTableNameConverter.from(tableDescriptor);
+        TableId tableId = HTableNameConverter.from(tableDescriptor);
         TableStats stat = datasetStat.get(tableId);
         if (stat == null) {
           stat = new TableStats(regionLoad.getStorefileSizeMB(), regionLoad.getMemStoreSizeMB());

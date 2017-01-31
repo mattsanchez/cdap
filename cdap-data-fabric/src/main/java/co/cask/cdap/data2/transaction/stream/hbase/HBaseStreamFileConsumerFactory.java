@@ -15,6 +15,7 @@
  */
 package co.cask.cdap.data2.transaction.stream.hbase;
 
+import co.cask.cdap.api.common.Bytes;
 import co.cask.cdap.common.conf.CConfiguration;
 import co.cask.cdap.common.conf.Constants;
 import co.cask.cdap.data.file.FileReader;
@@ -32,20 +33,21 @@ import co.cask.cdap.data2.transaction.stream.StreamConsumerState;
 import co.cask.cdap.data2.transaction.stream.StreamConsumerStateStore;
 import co.cask.cdap.data2.transaction.stream.StreamConsumerStateStoreFactory;
 import co.cask.cdap.data2.util.TableId;
+import co.cask.cdap.data2.util.hbase.ColumnFamilyDescriptorBuilder;
+import co.cask.cdap.data2.util.hbase.HBaseDDLExecutorFactory;
 import co.cask.cdap.data2.util.hbase.HBaseTableUtil;
-import co.cask.cdap.data2.util.hbase.HTableDescriptorBuilder;
+import co.cask.cdap.data2.util.hbase.TableDescriptorBuilder;
 import co.cask.cdap.hbase.wd.AbstractRowKeyDistributor;
 import co.cask.cdap.hbase.wd.RowKeyDistributorByHashPrefix;
 import co.cask.cdap.proto.id.NamespaceId;
+import co.cask.cdap.spi.hbase.HBaseDDLExecutor;
 import com.google.inject.Inject;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
 
 import java.io.IOException;
-import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
@@ -57,6 +59,7 @@ public final class HBaseStreamFileConsumerFactory extends AbstractStreamFileCons
   private final HBaseTableUtil tableUtil;
   private final CConfiguration cConf;
   private final Configuration hConf;
+  private final HBaseDDLExecutorFactory ddlExecutorFactory;
 
   @Inject
   HBaseStreamFileConsumerFactory(StreamAdmin streamAdmin, StreamConsumerStateStoreFactory stateStoreFactory,
@@ -65,6 +68,7 @@ public final class HBaseStreamFileConsumerFactory extends AbstractStreamFileCons
     this.hConf = hConf;
     this.cConf = cConf;
     this.tableUtil = tableUtil;
+    this.ddlExecutorFactory = new HBaseDDLExecutorFactory(cConf, hConf);
   }
 
   @Override
@@ -80,17 +84,18 @@ public final class HBaseStreamFileConsumerFactory extends AbstractStreamFileCons
     byte[][] splitKeys = HBaseTableUtil.getSplitKeys(splits, splits, distributor);
 
     TableId hBaseTableId = tableUtil.createHTableId(new NamespaceId(tableId.getNamespace()), tableId.getTableName());
-    HTableDescriptorBuilder htd = tableUtil.buildHTableDescriptor(hBaseTableId);
 
-    HColumnDescriptor hcd = new HColumnDescriptor(QueueEntryRow.COLUMN_FAMILY);
-    hcd.setMaxVersions(1);
+    TableDescriptorBuilder tdBuilder = HBaseTableUtil.getTableDescriptorBuilder(hBaseTableId, cConf);
 
-    htd.addFamily(hcd);
-    htd.setValue(QueueConstants.DISTRIBUTOR_BUCKETS, Integer.toString(splits));
+    ColumnFamilyDescriptorBuilder cfdBuilder =
+      HBaseTableUtil.getColumnFamilyDescriptorBuilder(Bytes.toString(QueueEntryRow.COLUMN_FAMILY), hConf);
 
-    try (HBaseAdmin admin = new HBaseAdmin(hConf)) {
-      tableUtil.createTableIfNotExists(admin, hBaseTableId, htd.build(), splitKeys,
-                                       QueueConstants.MAX_CREATE_TABLE_WAIT, TimeUnit.MILLISECONDS);
+    tdBuilder.addColumnFamily(cfdBuilder.build());
+
+    tdBuilder.addProperty(QueueConstants.DISTRIBUTOR_BUCKETS, Integer.toString(splits));
+
+    try (HBaseDDLExecutor ddlExecutor = ddlExecutorFactory.get()) {
+      ddlExecutor.createTableIfNotExists(tdBuilder.build(), splitKeys);
     }
 
     HTable hTable = tableUtil.createHTable(hConf, hBaseTableId);
@@ -104,10 +109,10 @@ public final class HBaseStreamFileConsumerFactory extends AbstractStreamFileCons
 
   @Override
   protected void dropTable(TableId tableId) throws IOException {
-    try (HBaseAdmin admin = new HBaseAdmin(hConf)) {
+    try (HBaseDDLExecutor ddlExecutor = ddlExecutorFactory.get(); HBaseAdmin admin = new HBaseAdmin(hConf)) {
       TableId hBaseTableId = tableUtil.createHTableId(new NamespaceId(tableId.getNamespace()), tableId.getTableName());
       if (tableUtil.tableExists(admin, hBaseTableId)) {
-        tableUtil.dropTable(admin, hBaseTableId);
+        tableUtil.dropTable(ddlExecutor, hBaseTableId);
       }
     }
   }
